@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <!-- WPF and WinForms both define Application, MessageBox, etc., so keep usings explicit. -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- WFO0003 wants DPI mode set through the WinForms API; this is a WPF app, so the manifest is correct. -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+    <RootNamespace>GestureSpike</RootNamespace>
+  </PropertyGroup>
+
+</Project>
