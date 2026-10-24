@@ -29,6 +29,7 @@ public partial class App : Application
     private const string TrayTitle = "Circularity";
 
     private Mutex? _singleInstance;
+    private bool _isMainInstance; // False for a copy that only handed its files to the running one.
     private Settings _settings = new();
     private GestureHook? _hook;
     private WheelWindow? _wheel;
@@ -38,7 +39,17 @@ public partial class App : Application
     private Forms.NotifyIcon? _tray;
     private Forms.ToolStripMenuItem? _cancelItem;
     private SettingsWindow? _settingsWindow;
+    private InstanceChannel? _channel;
+    private GlobalHotkey? _hotkey;
     private bool _dialogOpen;
+
+    // Explorer launches one copy per selected file for "Convert with Circularity", each handing its
+    // file over separately, so files arriving close together are gathered into one wheel.
+    private readonly List<string> _incomingFiles = new();
+    private System.Windows.Threading.DispatcherTimer? _incomingTimer;
+
+    /// <summary>What clicking the latest notification opens: a converted file or folder, or nothing.</summary>
+    private string? _notificationTarget;
 
     // Read on the hook thread.
     private volatile bool _paused;
@@ -49,10 +60,14 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        _singleInstance = new Mutex(true, @"Local\Circularity", out bool isFirst);
-        if (!isFirst)
+        var launchFiles = e.Args.Where(File.Exists).ToArray();
+        _singleInstance = new Mutex(true, @"Local\Circularity", out _isMainInstance);
+        if (!_isMainInstance)
         {
-            MessageBox.Show("Circularity is already running (look in the tray).", TrayTitle);
+            // Already running: hand over the files, or ask it to show Settings, and quietly exit.
+            var message = launchFiles.Length > 0 ? launchFiles : new[] { InstanceChannel.OpenSettingsMessage };
+            if (!InstanceChannel.TrySend(message))
+                MessageBox.Show("Circularity is already running (look in the tray).", TrayTitle);
             Shutdown();
             return;
         }
@@ -77,7 +92,7 @@ public partial class App : Application
             Log.Write("WebView2 runtime not found; Markdown/HTML/TXT to PDF is unavailable.");
 
         // Order matters only where two could do the same job: the first that can, does.
-        _queue = new ConversionQueue(new IConverter[] { new ImageConverter(), _ffmpeg, new PdfConverter(), _webPdf, new OfficeConverter() });
+        _queue = new ConversionQueue(new IConverter[] { new ImageConverter(_ffmpeg), _ffmpeg, new PdfConverter(), _webPdf, new OfficeConverter() });
         _queue.JobChanged += _ => Dispatcher.BeginInvoke(UpdateTrayStatus);
         _queue.BatchFinished += batch => Dispatcher.BeginInvoke(() => ReportBatch(batch));
 
@@ -99,8 +114,105 @@ public partial class App : Application
         _hook.DragEnded += () => Dispatcher.BeginInvoke(() => _wheel.OnDragEnded());
         Log.Write("Gesture hooks installed.");
 
-        _tray.ShowBalloonTip(4000, "Circularity is running",
-            "Drag a file and tap right-click (or Shift), then drop it on a button.", Forms.ToolTipIcon.Info);
+        _channel = new InstanceChannel();
+        _channel.Received += lines => Dispatcher.BeginInvoke(() => OnLaunchedAgain(lines));
+        _channel.StartListening();
+
+        _hotkey = new GlobalHotkey();
+        _hotkey.Pressed += OnHotkey;
+        UpdateHotkey();
+
+        if (launchFiles.Length > 0)
+        {
+            // Started by "Convert with Circularity" or Send to: go straight to the wheel.
+            ReceiveFiles(launchFiles);
+        }
+        else if (!_settings.WelcomeShown)
+        {
+            _settings.WelcomeShown = true;
+            _settings.Save();
+            ShowWelcome();
+        }
+        else if (_settings.NotifyOnStart)
+        {
+            Notify("Circularity is running",
+                "Drag a file and tap right-click (or Shift), or select files and press Ctrl+Alt+C.", Forms.ToolTipIcon.Info);
+        }
+    }
+
+    private void ShowWelcome()
+    {
+        var welcome = Dialog(new WelcomeWindow(_settings));
+        welcome.OpenSettingsRequested += OpenSettings;
+        welcome.Show();
+    }
+
+    /// <summary>Another launch handed over files (open the wheel) or nothing (show Settings).</summary>
+    private void OnLaunchedAgain(string[] lines)
+    {
+        if (lines.Contains(InstanceChannel.OpenSettingsMessage))
+            OpenSettings();
+        else
+            ReceiveFiles(lines.Where(File.Exists).ToArray());
+    }
+
+    private void ReceiveFiles(string[] files)
+    {
+        if (files.Length == 0)
+            return;
+        _incomingFiles.AddRange(files.Except(_incomingFiles, StringComparer.OrdinalIgnoreCase));
+        if (_incomingTimer == null)
+        {
+            _incomingTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+            _incomingTimer.Tick += (_, _) =>
+            {
+                _incomingTimer.Stop();
+                var batch = _incomingFiles.ToArray();
+                _incomingFiles.Clear();
+                ShowWheelAtCursor(batch);
+            };
+        }
+        _incomingTimer.Stop();
+        _incomingTimer.Start();
+    }
+
+    /// <summary>Ctrl+Alt+C: the wheel for whatever is selected in the active Explorer window or the desktop.</summary>
+    private void OnHotkey()
+    {
+        if (_paused)
+            return;
+        var files = ExplorerSelection.ForForegroundWindow();
+        if (files.Length == 0)
+        {
+            Notify("Nothing selected", "Select one or more files in File Explorer or on the desktop, then press Ctrl+Alt+C.",
+                Forms.ToolTipIcon.Info);
+            return;
+        }
+        ShowWheelAtCursor(files);
+    }
+
+    private void ShowWheelAtCursor(string[] files)
+    {
+        if (files.Length == 0 || _wheel == null)
+            return;
+        Native.GetCursorPos(out var cursor);
+        _wheel.ShowForFiles(files, cursor.X, cursor.Y);
+    }
+
+    private void UpdateHotkey()
+    {
+        if (_hotkey == null)
+            return;
+        if (!_settings.HotkeyEnabled)
+        {
+            _hotkey.Unregister();
+            return;
+        }
+        if (!_hotkey.IsRegistered && !_hotkey.Register(Native.MOD_CONTROL | Native.MOD_ALT, 0x43 /* C */))
+        {
+            Log.Write("Ctrl+Alt+C is already used by another app; the shortcut is unavailable.");
+            Notify("Ctrl+Alt+C is taken", "Another app already uses that shortcut, so Circularity can't.", Forms.ToolTipIcon.Warning);
+        }
     }
 
     private void OnUserPreferenceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
@@ -115,6 +227,7 @@ public partial class App : Application
         _rightClickEnabled = settings.RightClickTrigger;
         _shiftEnabled = settings.ShiftTrigger;
         _wheel?.ApplySettings(settings);
+        UpdateHotkey();
 
         if (_tray != null)
         {
@@ -371,6 +484,10 @@ public partial class App : Application
             string title = failed.Count == jobs.Count ? "That didn't work" : $"{failed.Count} of {jobs.Count} files failed";
             Notify(title, failed[0].Error ?? "Unknown error. Details are in the log.", Forms.ToolTipIcon.Warning);
         }
+        else if (!_settings.NotifyOnFinish)
+        {
+            // Finished fine and the user has turned these off; failures above are always shown.
+        }
         else if (succeeded.Count > 0)
         {
             string title = succeeded.Count == 1 ? "Done" : $"Done: {succeeded.Count} files";
@@ -379,7 +496,7 @@ public partial class App : Application
                 : Path.GetFileName(j.OutputPath)));
             if (cancelled > 0)
                 body += $" ({cancelled} cancelled)";
-            Notify(title, body, Forms.ToolTipIcon.Info);
+            Notify(title, body + "\nClick to show.", Forms.ToolTipIcon.Info, openOnClick: succeeded[0].OutputPath);
         }
         else
         {
@@ -436,15 +553,39 @@ public partial class App : Application
             Visible = true,
         };
         tray.DoubleClick += (_, _) => OpenSettings();
+        tray.BalloonTipClicked += (_, _) => OnNotificationClicked();
         return tray;
     }
 
-    private void Notify(string title, string text, Forms.ToolTipIcon icon) =>
+    /// <param name="openOnClick">A file (shown selected in Explorer) or folder (opened) for when the notification is clicked.</param>
+    private void Notify(string title, string text, Forms.ToolTipIcon icon, string? openOnClick = null)
+    {
+        _notificationTarget = openOnClick;
         _tray?.ShowBalloonTip(4000, title, string.IsNullOrEmpty(text) ? " " : text, icon);
+    }
+
+    private void OnNotificationClicked()
+    {
+        string? target = _notificationTarget;
+        _notificationTarget = null;
+        try
+        {
+            if (Directory.Exists(target))
+                Process.Start("explorer.exe", $"\"{target}\"");
+            else if (File.Exists(target))
+                Process.Start("explorer.exe", $"/select,\"{target}\"");
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            Log.Write($"Couldn't show {target}: {ex.Message}");
+        }
+    }
 
     protected override void OnExit(ExitEventArgs e)
     {
         _hook?.Dispose();
+        _hotkey?.Dispose();
+        _channel?.Dispose();
         // Cancels running conversions; FFmpeg processes are killed and partial files deleted.
         _queue?.Dispose();
         _webPdf?.Dispose();
@@ -455,7 +596,8 @@ public partial class App : Application
             _tray.Icon?.Dispose();
             _tray.Dispose();
         }
-        Log.Write("---- Circularity exiting ----");
+        if (_isMainInstance)
+            Log.Write("---- Circularity exiting ----");
         _singleInstance?.Dispose();
         base.OnExit(e);
     }

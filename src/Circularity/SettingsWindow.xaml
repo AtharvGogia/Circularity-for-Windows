@@ -60,6 +60,12 @@
             <TextBlock Text="While dragging a file with the left button:" Opacity="0.75" Margin="0,0,0,8" />
             <CheckBox x:Name="RightClickCheck" Content="Press the right mouse button" />
             <CheckBox x:Name="ShiftCheck" Content="Press Shift (works on touchpads)" Margin="0,4,0,0" />
+            <CheckBox x:Name="HotkeyCheck" Content="Ctrl+Alt+C opens the wheel for selected files" Margin="0,12,0,0" />
+
+            <TextBlock Text="Notifications" FontSize="20" FontWeight="SemiBold" Margin="0,28,0,8" />
+            <CheckBox x:Name="NotifyFinishCheck" Content="When a conversion finishes" />
+            <CheckBox x:Name="NotifyStartCheck" Content="When Circularity starts" Margin="0,4,0,0" />
+            <TextBlock Text="Problems are always shown." Opacity="0.65" Margin="0,6,0,0" />
 
             <TextBlock Text="Startup" FontSize="20" FontWeight="SemiBold" Margin="0,28,0,8" />
             <CheckBox x:Name="StartupCheck" Content="Start Circularity when I sign in to Windows" />

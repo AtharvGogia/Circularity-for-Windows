@@ -18,6 +18,7 @@ FFmpeg (ffmpeg.exe)
     Opus                      BSD licence             https://opus-codec.org
     libogg, libvorbis         BSD licence             https://xiph.org
     dav1d (AV1 decoding)      BSD 2-Clause licence    https://code.videolan.org/videolan/dav1d
+    libwebp (WebP encoding)   BSD licence             https://chromium.googlesource.com/webm/libwebp
     zlib                      zlib licence            https://zlib.net
 
 .NET runtime

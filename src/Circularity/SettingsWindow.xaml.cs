@@ -49,6 +49,9 @@ internal partial class SettingsWindow : Window
         OpacitySlider.ValueChanged += (_, _) => OnControlChanged();
         RightClickCheck.Click += (_, _) => OnControlChanged();
         ShiftCheck.Click += (_, _) => OnControlChanged();
+        HotkeyCheck.Click += (_, _) => OnControlChanged();
+        NotifyFinishCheck.Click += (_, _) => OnControlChanged();
+        NotifyStartCheck.Click += (_, _) => OnControlChanged();
         foreach (var option in new[] { SystemTheme, LightTheme, DarkTheme })
             option.Checked += (_, _) => OnControlChanged();
 
@@ -67,6 +70,9 @@ internal partial class SettingsWindow : Window
         OpacitySlider.Value = Math.Round(_settings.Opacity * 100);
         RightClickCheck.IsChecked = _settings.RightClickTrigger;
         ShiftCheck.IsChecked = _settings.ShiftTrigger;
+        HotkeyCheck.IsChecked = _settings.HotkeyEnabled;
+        NotifyFinishCheck.IsChecked = _settings.NotifyOnFinish;
+        NotifyStartCheck.IsChecked = _settings.NotifyOnStart;
         SystemTheme.IsChecked = _settings.Theme == AppTheme.System;
         LightTheme.IsChecked = _settings.Theme == AppTheme.Light;
         DarkTheme.IsChecked = _settings.Theme == AppTheme.Dark;
@@ -84,6 +90,9 @@ internal partial class SettingsWindow : Window
         _settings.Opacity = OpacitySlider.Value / 100;
         _settings.RightClickTrigger = RightClickCheck.IsChecked == true;
         _settings.ShiftTrigger = ShiftCheck.IsChecked == true;
+        _settings.HotkeyEnabled = HotkeyCheck.IsChecked == true;
+        _settings.NotifyOnFinish = NotifyFinishCheck.IsChecked == true;
+        _settings.NotifyOnStart = NotifyStartCheck.IsChecked == true;
         _settings.Theme = LightTheme.IsChecked == true ? AppTheme.Light
             : DarkTheme.IsChecked == true ? AppTheme.Dark
             : AppTheme.System;
@@ -171,7 +180,8 @@ internal partial class SettingsWindow : Window
 
     private void Reset_Click(object sender, RoutedEventArgs e)
     {
-        _settings = new Settings();
+        // Not a preference, so resetting shouldn't bring the welcome back.
+        _settings = new Settings { WelcomeShown = _settings.WelcomeShown };
         LoadControls();
         SettingsChanged?.Invoke(_settings.Clone());
     }

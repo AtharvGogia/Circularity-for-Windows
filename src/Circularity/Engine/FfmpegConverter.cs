@@ -38,7 +38,10 @@ internal sealed partial class FfmpegConverter : IConverter
     public FfmpegConverter(string? ffmpegPath = null)
     {
         _ffmpegPath = ffmpegPath ?? Locate();
-        UsesWindowsH264 = _ffmpegPath != null && !HasEncoder(_ffmpegPath, "libx264");
+        string encoders = _ffmpegPath == null ? "" : ListEncoders(_ffmpegPath);
+        bool Has(string encoder) => Regex.IsMatch(encoders, $@"\s{Regex.Escape(encoder)}\s");
+        UsesWindowsH264 = _ffmpegPath != null && !Has("libx264");
+        CanEncodeWebp = Has("libwebp");
         _h264 = (UsesWindowsH264 ? WindowsH264 : X264).Concat(Aac).ToArray();
         _argsByTarget = new()
         {
@@ -61,7 +64,15 @@ internal sealed partial class FfmpegConverter : IConverter
     /// <summary>True when this FFmpeg has no x264, so H.264 goes through Windows' own encoder.</summary>
     public bool UsesWindowsH264 { get; }
 
-    private static bool HasEncoder(string ffmpegPath, string encoder)
+    /// <summary>Whether this FFmpeg can write WebP images (used by <see cref="ImageConverter"/>).</summary>
+    public bool CanEncodeWebp { get; }
+
+    /// <summary>Encodes an image FFmpeg can read (the image converter hands it a PNG) to WebP.</summary>
+    public Task EncodeWebpAsync(string inputPath, string outputPath, CancellationToken cancellationToken) =>
+        RunFfmpegAsync(new[] { "-i", inputPath, "-c:v", "libwebp", "-quality", "85", outputPath }, null, cancellationToken);
+
+    /// <summary>The output of "ffmpeg -encoders", or "" if it can't be run.</summary>
+    private static string ListEncoders(string ffmpegPath)
     {
         try
         {
@@ -71,11 +82,11 @@ internal sealed partial class FfmpegConverter : IConverter
             using var process = Process.Start(startInfo)!;
             string list = process.StandardOutput.ReadToEnd();
             process.WaitForExit();
-            return Regex.IsMatch(list, $@"\s{Regex.Escape(encoder)}\s");
+            return list;
         }
         catch (System.ComponentModel.Win32Exception)
         {
-            return false;
+            return "";
         }
     }
 

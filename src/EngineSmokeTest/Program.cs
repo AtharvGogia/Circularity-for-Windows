@@ -29,6 +29,8 @@ internal static class Program
             return DragTest.Run();
         if (args.Length == 1 && args[0] == "--startup-test")
             return StartupTest.Run();
+        if (args.Length == 1 && args[0] == "--interaction-test")
+            return InteractionTest.Run();
         if (args.Length == 2 && args[0] == "--write-icon")
         {
             AppIcon.WriteIco(args[1], new Settings().Accent);
@@ -68,14 +70,14 @@ internal static class Program
             File.WriteAllText(unknown, "a format nothing understands");
 
             using var webPdf = new WebPdfConverter();
-            using var queue = new ConversionQueue(new IConverter[] { new ImageConverter(), ffmpeg, new PdfConverter(), webPdf, new OfficeConverter() });
+            using var queue = new ConversionQueue(new IConverter[] { new ImageConverter(ffmpeg), ffmpeg, new PdfConverter(), webPdf, new OfficeConverter() });
 
             // 1. Every supported conversion succeeds and produces a file FFmpeg can read back.
             var cases = new (string Input, string[] Targets)[]
             {
                 (video, new[] { "mp4", "webm", "mov", "gif", "mp3" }),
                 (audio, new[] { "mp3", "wav", "flac", "ogg", "m4a" }),
-                (image, new[] { "jpg", "bmp", "gif", "tiff" }),
+                (image, new[] { "jpg", "webp", "bmp", "gif", "tiff" }),
             };
             foreach (var (input, targets) in cases)
             {

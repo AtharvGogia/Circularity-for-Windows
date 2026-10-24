@@ -88,6 +88,9 @@ internal sealed class WheelView : Canvas
 
     public IReadOnlyList<WheelAction> Actions => _actions;
 
+    /// <summary>The highlighted button, <see cref="CenterIndex"/>, or -1.</summary>
+    public int HotIndex => _hot;
+
     private double Radius => _settings.WheelSize / 2.0;
     private double CenterRadius => _settings.WheelSize * 0.17;
     private double Mid => Extent / 2;

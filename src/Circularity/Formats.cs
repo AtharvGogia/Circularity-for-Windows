@@ -38,7 +38,7 @@ internal static class Formats
 {
     // Everything worth offering per source format. Buttons only appear when some installed
     // converter can actually do it for every dropped file (Office ones need Office, for example).
-    private static readonly string[] ImageTargets = { "png", "jpg", "bmp", "gif", "tiff", "pdf" };
+    private static readonly string[] ImageTargets = { "png", "jpg", "webp", "bmp", "gif", "tiff", "pdf" };
     private static readonly string[] VideoTargets = { "mp4", "webm", "mov", "gif", "mp3" };
     private static readonly string[] AudioTargets = { "mp3", "wav", "flac", "ogg", "m4a" };
     private static readonly Dictionary<string, string[]> DocumentTargets = new()

@@ -27,6 +27,18 @@ internal sealed class Settings
     public bool RightClickTrigger { get; set; } = true;
     public bool ShiftTrigger { get; set; } = true;
 
+    /// <summary>Ctrl+Alt+C opens the wheel for the files selected in Explorer or on the desktop.</summary>
+    public bool HotkeyEnabled { get; set; } = true;
+
+    /// <summary>Show a notification when conversions finish. Failures are always shown.</summary>
+    public bool NotifyOnFinish { get; set; } = true;
+
+    /// <summary>Show "Circularity is running" when it starts.</summary>
+    public bool NotifyOnStart { get; set; } = true;
+
+    /// <summary>Set once the first-run welcome has been shown.</summary>
+    public bool WelcomeShown { get; set; }
+
     public static readonly string FilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Circularity", "settings.json");
 

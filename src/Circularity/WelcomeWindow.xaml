@@ -1,0 +1,49 @@
+<Window x:Class="Circularity.WelcomeWindow"
+        x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Welcome to Circularity"
+        Width="780" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        ThemeMode="System">
+    <Grid Margin="24">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border Width="300" Height="300" CornerRadius="12" ClipToBounds="True" VerticalAlignment="Top">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#FF5B7FD6" Offset="0" />
+                    <GradientStop Color="#FF9C5BD6" Offset="0.5" />
+                    <GradientStop Color="#FF2A9D8F" Offset="1" />
+                </LinearGradientBrush>
+            </Border.Background>
+            <ContentPresenter x:Name="DemoHost" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+
+        <StackPanel Grid.Column="1" Margin="28,0,0,0">
+            <TextBlock Text="Convert files right where your cursor is" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />
+            <TextBlock Opacity="0.75" Margin="0,6,0,18" TextWrapping="Wrap"
+                       Text="Circularity runs quietly in the tray (the ^ arrow by the clock)." />
+
+            <TextBlock FontWeight="SemiBold" Text="With the mouse" />
+            <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" Text="1.  Start dragging a file in File Explorer or on the desktop." />
+            <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" Text="2.  While still holding the button, tap right-click, or press Shift." />
+            <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" Text="3.  Move onto a format or tool in the wheel and let go." />
+
+            <TextBlock FontWeight="SemiBold" Text="Without dragging" Margin="0,16,0,0" />
+            <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" Text="Select files and press Ctrl+Alt+C, or right-click them and choose Convert with Circularity." />
+
+            <TextBlock Opacity="0.75" TextWrapping="Wrap" Margin="0,16,0,0"
+                       Text="Converted files are saved next to the originals, which are never changed." />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,28,0,0">
+                <Button Content="Open settings" Click="Settings_Click" Margin="0,0,8,0" />
+                <Button Content="Got it" Click="Close_Click" IsDefault="True" IsCancel="True" MinWidth="96" />
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>

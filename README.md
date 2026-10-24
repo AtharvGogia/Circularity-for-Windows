@@ -22,8 +22,19 @@ A tray app that:
 3. Shows a translucent wheel around the cursor, its ring split into curved, icon-labelled segments. The wheel is a
    real drop target: keep dragging onto a button and release. Dropping in the middle cancels;
    dragging off the wheel dismisses it, and the drag carries on as normal.
+
+   **Without dragging**, the same wheel opens at the cursor in click mode: hover and click a button,
+   or use the arrow keys and Enter; Esc, the centre or clicking elsewhere cancels. Three ways in:
+   - **Ctrl+Alt+C** with files selected in File Explorer (any tab) or on the desktop
+   - **Right-click → Convert with Circularity** (added by the installer; on Windows 11 it's under
+     "Show more options")
+   - **Right-click → Send to → Circularity**, which hands over every selected file at once
+
+   Launching Circularity while it's already running hands the files to the running copy (or, with no
+   files, opens Settings), so these never start a second copy.
 4. Runs the job in the background:
-   - **Images** → PNG, JPG, BMP, GIF, TIFF (Windows Imaging Component), PDF
+   - **Images** → PNG, JPG, BMP, GIF, TIFF (Windows Imaging Component), WebP (decoded by Windows,
+     encoded by FFmpeg's libwebp), PDF
    - **Video** → MP4, WebM, MOV, GIF, MP3 (FFmpeg)
    - **Audio** → MP3, WAV, FLAC, OGG, M4A (FFmpeg)
    - **Resize** (images and video): to a width × height, keeping the aspect ratio (fit inside) or
@@ -56,7 +67,10 @@ the wheel always answers the drag with "Copy", never "Move".
 
 While something is running, hover the tray icon to see progress
 (`clip.mov → MP4 43% (+2 more)`). **Cancel conversions** in its menu stops everything. A cancelled or
-failed job leaves no half-written file behind. You get one notification per drop.
+failed job leaves no half-written file behind. You get one notification per drop; clicking it shows
+the result in File Explorer.
+
+The first time Circularity starts, a short welcome explains the gestures.
 
 ### Settings
 
@@ -65,7 +79,8 @@ Double-click the tray icon (or right-click → **Settings…**) for:
 - **theme**: same as Windows (follows it live), light or dark, for the wheel and every window
 - wheel **size** (200–360 px) and **background opacity**
 - **accent colour**: presets or any custom colour; the tray icon follows it
-- which **gestures** are on (right-click, Shift)
+- which **gestures** are on (right-click, Shift, the Ctrl+Alt+C shortcut)
+- **notifications** when conversions finish and when Circularity starts (problems always show)
 - **start at sign-in**: the same Windows sign-in entry the installer's checkbox creates, so the two
   always agree; it also notices (and, when ticked, undoes) "Disabled" in Task Manager's Startup apps
 
@@ -83,14 +98,15 @@ It produces, in `artifacts\`:
 
 | Output | What it is | Size |
 | --- | --- | --- |
-| `artifacts\CircularitySetup-0.1.0.exe` | The installer to hand out | ~64 MB |
+| `artifacts\CircularitySetup-0.2.0.exe` | The installer to hand out | ~64 MB |
 | `artifacts\Circularity\Circularity.exe` | The app itself, in a self-contained folder that also runs without installing (e.g. from a USB stick) | ~214 MB folder |
 
 The installer:
 
 - installs for the current user, so there's no admin prompt, into
   `%LOCALAPPDATA%\Programs\Circularity\Circularity.exe`
-- adds a Start menu shortcut, and optionally starts Circularity at sign-in and a desktop shortcut
+- adds a Start menu shortcut and a **Send to** entry, and optionally **Convert with Circularity**
+  on files' right-click menu (on by default), starting at sign-in, and a desktop shortcut
 - installs Microsoft's WebView2 only on the rare PC that doesn't have it (Windows 11 always does)
 - appears in **Settings → Apps** with a normal uninstaller, which also removes the sign-in entry
 
@@ -169,6 +185,10 @@ a few seconds**, so keep your hands off it while it runs:
 dotnet run --project src/EngineSmokeTest -- --drag-test
 ```
 
+`--interaction-test` checks the no-drag ways in: the hand-off between launches, the Ctrl+Alt+C
+registration, click mode by keyboard, and reading the selection from a real File Explorer window
+(an Explorer window and the wheel flash up briefly; run it with Circularity closed).
+
 `--startup-test` checks the start-at-sign-in toggle against the real registry, then restores
 whatever was there before.
 
@@ -217,4 +237,8 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 | `Engine/Sta.cs` | Runs work on the single-threaded apartment thread WPF imaging and Office need. |
 | `Engine/OutputPaths.cs` | Picks a free output name (or folder) next to the original and reserves it. |
 | `Theme.cs` | Light / dark / same-as-Windows, for the wheel and the windows. |
+| `InstanceChannel.cs` | One running copy; later launches hand their files over a private named pipe. |
+| `GlobalHotkey.cs` / `ExplorerSelection.cs` | Ctrl+Alt+C, and reading the selected files from Explorer or the desktop. |
+| `WelcomeWindow.xaml(.cs)` | The first-run welcome. |
+| `StartAtSignIn.cs` | The start-at-sign-in toggle (shared with the installer). |
 | `App.xaml.cs` | Tray icon and menu, gesture checks, routing wheel buttons to dialogs and the queue, notifications. |

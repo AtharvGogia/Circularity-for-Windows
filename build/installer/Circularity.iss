@@ -44,6 +44,7 @@ RestartApplications=no
 
 [Tasks]
 Name: "startup"; Description: "Start Circularity when I sign in"
+Name: "contextmenu"; Description: "Add ""Convert with Circularity"" to the right-click menu for files"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 
 [Files]
@@ -53,10 +54,23 @@ Source: "MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterin
 [Icons]
 Name: "{autoprograms}\Circularity"; Filename: "{app}\Circularity.exe"
 Name: "{autodesktop}\Circularity"; Filename: "{app}\Circularity.exe"; Tasks: desktopicon
+; Right-click → Send to → Circularity: passes every selected file in one go.
+Name: "{usersendto}\Circularity"; Filename: "{app}\Circularity.exe"
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Circularity"; \
     ValueData: """{app}\Circularity.exe"""; Flags: uninsdeletevalue; Tasks: startup
+
+; "Convert with Circularity" on every file's right-click menu (on Windows 11, under "Show more options").
+; Explorer starts one copy per selected file; Circularity gathers them into one wheel.
+Root: HKCU; Subkey: "Software\Classes\*\shell\Circularity"; ValueType: string; ValueName: ""; \
+    ValueData: "Convert with Circularity"; Flags: uninsdeletekey; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\*\shell\Circularity"; ValueType: string; ValueName: "Icon"; \
+    ValueData: """{app}\Circularity.exe"",0"; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\*\shell\Circularity"; ValueType: string; ValueName: "MultiSelectModel"; \
+    ValueData: "Player"; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\*\shell\Circularity\command"; ValueType: string; ValueName: ""; \
+    ValueData: """{app}\Circularity.exe"" ""%1"""; Tasks: contextmenu
 
 [Run]
 ; Markdown/HTML/TXT → PDF needs WebView2. It's part of Windows 11; this only runs on PCs without it.

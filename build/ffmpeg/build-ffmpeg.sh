@@ -21,7 +21,7 @@ pacman -S --needed --noconfirm \
     mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf \
     mingw-w64-ucrt-x86_64-zlib mingw-w64-ucrt-x86_64-libvpx mingw-w64-ucrt-x86_64-lame \
     mingw-w64-ucrt-x86_64-opus mingw-w64-ucrt-x86_64-libogg mingw-w64-ucrt-x86_64-libvorbis \
-    mingw-w64-ucrt-x86_64-dav1d
+    mingw-w64-ucrt-x86_64-dav1d mingw-w64-ucrt-x86_64-libwebp
 
 mkdir -p "$WORK"
 cd "$WORK"
@@ -43,13 +43,13 @@ echo "==> Configuring"
     --enable-zlib --enable-mediafoundation \
     `# The Media Foundation (Windows) encoders are built against Direct3D 11; d3d11.dll is part of Windows.` \
     --enable-d3d11va \
-    --enable-libvpx --enable-libmp3lame --enable-libopus --enable-libvorbis --enable-libdav1d \
+    --enable-libvpx --enable-libmp3lame --enable-libopus --enable-libvorbis --enable-libdav1d --enable-libwebp \
     --disable-encoders \
-    --enable-encoder=h264_mf,aac,libmp3lame,flac,pcm_s16le,libvorbis,libopus,libvpx_vp9,gif,png \
+    --enable-encoder=h264_mf,aac,libmp3lame,flac,pcm_s16le,libvorbis,libopus,libvpx_vp9,gif,png,libwebp \
     `# wrapped_avframe lets "-f null" decode a file end to end, which is how outputs are checked.` \
     --enable-encoder=wrapped_avframe \
     --disable-muxers \
-    --enable-muxer=mp4,mov,ipod,matroska,webm,gif,mp3,wav,flac,ogg,image2,null \
+    --enable-muxer=mp4,mov,ipod,matroska,webm,gif,mp3,wav,flac,ogg,image2,webp,null \
     --disable-filters \
     --enable-filter=scale,crop,fps,split,palettegen,paletteuse,format,aformat,aresample,null,anull \
     --enable-filter=setsar,setpts,asetpts,transpose,hflip,vflip,buffer,abuffer,buffersink,abuffersink \
@@ -67,7 +67,7 @@ mkdir -p "$OUT/bin" "$OUT/licenses"
 cp "$BUILD_OUT/bin/ffmpeg.exe" "$OUT/bin/"
 
 # Licence texts that must ship alongside the binary. MSYS2 only packages some of them; the rest
-# (libvpx, LAME, libvorbis, zlib) are kept in build/installer/licenses.
+# (libvpx, LAME, libvorbis, zlib, libwebp) are kept in build/installer/licenses.
 cp COPYING.LGPLv2.1 "$OUT/licenses/FFmpeg-LGPL-2.1.txt"
 for pkg in opus libogg dav1d; do
     src="/ucrt64/share/licenses/$pkg"

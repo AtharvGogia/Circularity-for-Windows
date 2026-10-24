@@ -12,16 +12,27 @@ namespace Circularity.Engine;
 
 /// <summary>
 /// Image conversion, resizing, cropping and compression using the Windows Imaging Component (via WPF).
-/// Reads anything WIC has a codec for (HEIC and WebP need the free Microsoft Store extensions);
-/// writes PNG, JPG, BMP, GIF and TIFF.
+/// Reads anything WIC has a codec for (HEIC needs the free Microsoft Store extension); writes PNG, JPG,
+/// BMP, GIF and TIFF itself, and WebP by handing a PNG to FFmpeg (libwebp) when it has that encoder.
 /// </summary>
 internal sealed class ImageConverter : IConverter
 {
     private static readonly HashSet<string> Writable = new() { "png", "jpg", "bmp", "gif", "tiff" };
 
+    private readonly FfmpegConverter? _ffmpeg;
+
+    /// <param name="ffmpeg">Used to write WebP; without it (or without libwebp), WebP isn't offered.</param>
+    public ImageConverter(FfmpegConverter? ffmpeg = null)
+    {
+        _ffmpeg = ffmpeg;
+    }
+
+    private bool CanWriteWebp => _ffmpeg?.CanEncodeWebp == true;
+
     public bool CanHandle(string inputPath, Operation operation) =>
         Formats.KindOf(inputPath) == FileKind.Image && operation switch
         {
+            ConvertTo { Target: "webp" } => CanWriteWebp,
             ConvertTo convert => Writable.Contains(convert.Target),
             ResizeTo or CropTo or CompressTo => true,
             _ => false,
@@ -35,26 +46,44 @@ internal sealed class ImageConverter : IConverter
         if (operation is CompressTo)
             return "jpg";
 
-        // Edits keep the format when WIC can write it. HEIC and WebP can only be read, so they become JPG.
+        // Edits keep the format when it can be written. HEIC can only be read, so it becomes JPG.
         string ext = Formats.NormalizedExtension(inputPath);
-        if (Writable.Contains(ext))
+        if (Writable.Contains(ext) || (ext == "webp" && CanWriteWebp))
             return ext;
         return ext == "ico" ? "png" : "jpg";
     }
 
-    public Task<string> RunAsync(string inputPath, Operation operation, string outputPath, IProgress<double> progress, CancellationToken cancellationToken)
+    public async Task<string> RunAsync(string inputPath, Operation operation, string outputPath, IProgress<double> progress, CancellationToken cancellationToken)
     {
         // WIC work is quick and can't be interrupted, so cancellation is only checked up front.
         cancellationToken.ThrowIfCancellationRequested();
-        return Sta.Run(() =>
+        string format = OutputExtension(inputPath, operation);
+
+        if (format != "webp")
         {
-            Run(inputPath, operation, outputPath);
-            progress.Report(1);
-            return outputPath;
-        }, "ImageConverter");
+            await Sta.Run(() => { Run(inputPath, operation, format, outputPath); return 0; }, "ImageConverter");
+        }
+        else
+        {
+            // WIC can't write WebP: do the work into a lossless PNG, then have FFmpeg encode that.
+            // Decoding stays with WIC so EXIF rotation and every readable format keep working.
+            string png = Path.Combine(Path.GetTempPath(), $"Circularity-{Guid.NewGuid():N}.png");
+            try
+            {
+                await Sta.Run(() => { Run(inputPath, operation, "png", png); return 0; }, "ImageConverter");
+                await _ffmpeg!.EncodeWebpAsync(png, outputPath, cancellationToken);
+            }
+            finally
+            {
+                File.Delete(png);
+            }
+        }
+
+        progress.Report(1);
+        return outputPath;
     }
 
-    private void Run(string inputPath, Operation operation, string outputPath)
+    private void Run(string inputPath, Operation operation, string format, string outputPath)
     {
         BitmapSource image = LoadOriented(inputPath);
         if (operation is CompressTo compress)
@@ -69,7 +98,7 @@ internal sealed class ImageConverter : IConverter
             CropTo crop => Crop(image, crop.Rect),
             _ => image,
         };
-        Save(image, OutputExtension(inputPath, operation), outputPath);
+        Save(image, format, outputPath);
     }
 
     /// <summary>Decodes the first frame, rotated upright according to its EXIF orientation. Frozen, so any thread can use it.</summary>

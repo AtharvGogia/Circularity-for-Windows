@@ -57,6 +57,7 @@ internal static class Previews
             var windows = new (string Name, Func<AppTheme, Window> Create)[]
             {
                 ("settings", theme => new SettingsWindow(new Settings { Theme = theme })),
+                ("welcome", theme => new WelcomeWindow(new Settings { Theme = theme })),
                 ("resize", _ => new ResizeDialog(sample, (4032, 3024))),
                 ("compress", _ => new CompressDialog(sample)),
                 ("crop", _ => new CropWindow(picture, "holiday.png", 1, 2)),
