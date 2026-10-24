@@ -14,8 +14,16 @@ A tray app that:
 3. Swallows that right-click, so the app you're dragging from doesn't cancel the drag.
 4. Pops up a wheel of formats around the cursor. The wheel is a real drop target, so you
    keep dragging onto a format and release.
-5. Converts images for real (PNG, JPG, BMP, GIF, TIFF). Video, audio and documents show
-   their wheels but only log the choice for now.
+5. Queues the conversion and runs it in the background:
+   - **Images** → PNG, JPG, BMP, GIF, TIFF (Windows Imaging Component)
+   - **Video** → MP4, WebM, MOV, GIF, MP3 (FFmpeg)
+   - **Audio** → MP3, WAV, FLAC, OGG, M4A (FFmpeg)
+   - Documents show their wheel but aren't converted yet; you get a "not supported yet" notice.
+
+While something is converting, hover the tray icon to see progress
+(`clip.mov → MP4 43% (+2 more)`), and use **Cancel conversions** in its menu to stop everything.
+A cancelled or failed conversion leaves no half-written file behind. One notification arrives per
+drop, when every file in it is done.
 
 The converted file is saved as a new copy next to the original (`photo.png`, or `photo (1).png`
 if that name is taken). The original is never touched: the wheel always answers the drag with
@@ -23,14 +31,31 @@ if that name is taken). The original is never touched: the wheel always answers 
 
 ### Run it
 
-Needs the .NET 10 SDK.
+Needs the .NET 10 SDK, and FFmpeg for video/audio:
+
+```bash
+winget install Gyan.FFmpeg
+```
+
+The app looks for `ffmpeg.exe` in `FFMPEG_PATH`, next to the app, in a `tools\` folder beside it,
+then on `PATH`.
 
 ```bash
 dotnet run --project prototype/GestureSpike
 ```
 
 A tray icon appears with a "GestureSpike is running" notification. Right-click the tray icon for
-**Pause gesture**, **Open log** and **Exit**.
+**Pause gesture**, **Cancel conversions**, **Open log** and **Exit**.
+
+### Test the engine
+
+A console harness generates sample video, audio and image files with FFmpeg, runs every
+supported conversion through the real queue, and checks the outputs decode cleanly. It also
+checks naming, unsupported formats, batches, progress and cancellation.
+
+```bash
+dotnet run --project prototype/EngineSmokeTest
+```
 
 ### Try it
 
@@ -60,6 +85,9 @@ Everything the hook decides is written to `%LOCALAPPDATA%\GestureSpike\log.txt`.
   drops from elevated apps into normal ones.
 - HEIC and WebP input need Microsoft's free HEIF / WebP image extensions installed.
   WebP output isn't supported.
+- Licensing, before shipping: the Gyan FFmpeg build is GPL because it includes x264. Bundling it
+  means the app must be GPL too; a closed-source app needs an LGPL FFmpeg build and a different
+  H.264 encoder (e.g. OpenH264 or the GPU's hardware encoder).
 
 ### How it's put together
 
@@ -68,5 +96,9 @@ Everything the hook decides is written to `%LOCALAPPDATA%\GestureSpike\log.txt`.
 | `MouseHook.cs` | Low-level hook on its own thread; detects the chord and swallows the right-click. |
 | `WheelWindow.xaml(.cs)` | Transparent, non-activating, topmost wheel; it's the drop target and draws the wedges. |
 | `Formats.cs` | Which output formats to offer for the dropped file types. |
-| `ImageConverter.cs` | Image conversion via Windows Imaging Component, including EXIF rotation. |
-| `App.xaml.cs` | Tray icon, allowlist / full-screen checks, wiring, running conversions off the UI thread. |
+| `Engine/ConversionQueue.cs` | Background job queue (two at a time): progress, cancellation, per-drop batches, cleanup of failed output. |
+| `Engine/IConverter.cs` | The interface each conversion backend implements. |
+| `Engine/ImageConverter.cs` | Image conversion via Windows Imaging Component, including EXIF rotation. |
+| `Engine/FfmpegConverter.cs` | Runs `ffmpeg.exe` with per-format settings and parses its progress output. |
+| `Engine/OutputPaths.cs` | Picks a free `name (n).ext` next to the original and reserves it. |
+| `App.xaml.cs` | Tray icon and menu, allowlist / full-screen checks, progress tooltip, notifications. |

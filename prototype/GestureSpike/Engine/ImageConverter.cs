@@ -1,24 +1,54 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace GestureSpike;
+namespace GestureSpike.Engine;
 
 /// <summary>
-/// Real image conversion using the Windows Imaging Component (via WPF), so the prototype
-/// does something useful end to end. Reads anything WIC has a codec for (HEIC and WebP
-/// need the free Microsoft Store extensions); writes PNG, JPG, BMP, GIF and TIFF.
-/// Must run on an STA thread.
+/// Image conversion using the Windows Imaging Component (via WPF). Reads anything WIC has a
+/// codec for (HEIC and WebP need the free Microsoft Store extensions); writes PNG, JPG, BMP,
+/// GIF and TIFF.
 /// </summary>
-internal static class ImageConverter
+internal sealed class ImageConverter : IConverter
 {
-    public static bool CanWrite(string target) => target is "png" or "jpg" or "bmp" or "gif" or "tiff";
+    public bool CanConvert(string inputPath, string target) =>
+        Formats.KindOf(inputPath) == FileKind.Image && target is "png" or "jpg" or "bmp" or "gif" or "tiff";
 
-    /// <summary>Converts one file and returns the path of the new copy next to it.</summary>
-    public static string Convert(string inputPath, string target)
+    public Task ConvertAsync(string inputPath, string target, string outputPath, IProgress<double> progress, CancellationToken cancellationToken)
+    {
+        // WIC encoding is quick and can't be interrupted, so cancellation is only checked up front.
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // WPF imaging (RenderTargetBitmap in particular) needs an STA thread.
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                Convert(inputPath, target, outputPath);
+                progress.Report(1);
+                done.SetResult();
+            }
+            catch (Exception ex)
+            {
+                done.SetException(ex);
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "ImageConverter",
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        return done.Task;
+    }
+
+    private static void Convert(string inputPath, string target, string outputPath)
     {
         BitmapSource image;
         using (var input = File.OpenRead(inputPath))
@@ -39,25 +69,12 @@ internal static class ImageConverter
             "bmp" => new BmpBitmapEncoder(),
             "gif" => new GifBitmapEncoder(),
             "tiff" => new TiffBitmapEncoder(),
-            _ => throw new NotSupportedException($"Can't write .{target} yet."),
+            _ => throw new NotSupportedException($"Can't write .{target} images."),
         };
         encoder.Frames.Add(BitmapFrame.Create(image));
 
-        string outputPath = UniqueOutputPath(inputPath, target);
-        using (var output = File.Create(outputPath))
-            encoder.Save(output);
-        return outputPath;
-    }
-
-    /// <summary>"photo.heic" -> "photo.png", or "photo (1).png" if that already exists.</summary>
-    private static string UniqueOutputPath(string inputPath, string target)
-    {
-        string dir = Path.GetDirectoryName(inputPath)!;
-        string name = Path.GetFileNameWithoutExtension(inputPath);
-        string candidate = Path.Combine(dir, $"{name}.{target}");
-        for (int i = 1; File.Exists(candidate); i++)
-            candidate = Path.Combine(dir, $"{name} ({i}).{target}");
-        return candidate;
+        using var output = File.Create(outputPath);
+        encoder.Save(output);
     }
 
     /// <summary>Phone photos are often stored sideways with an EXIF flag saying how to rotate them.</summary>

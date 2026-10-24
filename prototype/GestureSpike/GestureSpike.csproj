@@ -14,4 +14,8 @@
     <RootNamespace>GestureSpike</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="EngineSmokeTest" />
+  </ItemGroup>
+
 </Project>
