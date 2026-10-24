@@ -31,6 +31,10 @@ internal static class Program
             return StartupTest.Run();
         if (args.Length == 1 && args[0] == "--interaction-test")
             return InteractionTest.Run();
+        if (args.Length == 2 && args[0] == "--render-readme-media")
+            return ReadmeMedia.Render(args[1]);
+        if (args.Length >= 1 && args[0] == "--update-test")
+            return await UpdateTest.Run(args.Length > 1 ? args[1] : null);
         if (args.Length == 2 && args[0] == "--write-icon")
         {
             AppIcon.WriteIco(args[1], new Settings().Accent);

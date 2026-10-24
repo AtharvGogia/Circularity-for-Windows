@@ -31,6 +31,7 @@ internal partial class WheelWindow : Window
     private readonly DispatcherTimer _leaveTimer;
     private bool _dropped;
     private bool _clickMode;
+    private bool _closing;
     private string[] _clickFiles = Array.Empty<string>();
     private IntPtr _hwnd;
 
@@ -48,7 +49,7 @@ internal partial class WheelWindow : Window
             if (!_dropped)
             {
                 Log.Write("Drag ended without a drop on the wheel.");
-                Hide();
+                Dismiss();
             }
         };
 
@@ -59,7 +60,7 @@ internal partial class WheelWindow : Window
         {
             _leaveTimer.Stop();
             Log.Write("Dragged off the wheel; dismissed it.");
-            Hide();
+            Dismiss();
         };
 
         SourceInitialized += (_, _) =>
@@ -75,7 +76,7 @@ internal partial class WheelWindow : Window
             if (_clickMode && IsVisible)
             {
                 Log.Write("Wheel lost focus; dismissed it.");
-                Hide();
+                Dismiss();
             }
         };
         IsVisibleChanged += (_, _) =>
@@ -83,6 +84,40 @@ internal partial class WheelWindow : Window
             if (!IsVisible)
                 _clickMode = false;
         };
+    }
+
+    /// <summary>Showing and not on its way out.</summary>
+    public bool IsOpen => IsVisible && !_closing;
+
+    /// <summary>
+    /// Fades the wheel out, then hides it. While fading it lets the mouse and drags pass straight through,
+    /// so it never gets in the way of what's underneath.
+    /// </summary>
+    private void Dismiss()
+    {
+        if (!IsVisible || _closing)
+            return;
+        _closing = true;
+        _clickMode = false;
+        SetClickThrough(true);
+        _view.PlayOutro(() =>
+        {
+            // A new Show during the fade cancels it.
+            if (!_closing)
+                return;
+            _closing = false;
+            Hide();
+            SetClickThrough(false);
+        });
+    }
+
+    private void SetClickThrough(bool clickThrough)
+    {
+        if (_hwnd == IntPtr.Zero)
+            return;
+        int ex = Native.GetWindowLong(_hwnd, Native.GWL_EXSTYLE);
+        ex = clickThrough ? ex | Native.WS_EX_TRANSPARENT : ex & ~Native.WS_EX_TRANSPARENT;
+        Native.SetWindowLong(_hwnd, Native.GWL_EXSTYLE, ex);
     }
 
     public void ApplySettings(Settings settings)
@@ -137,6 +172,8 @@ internal partial class WheelWindow : Window
     /// </summary>
     private void Reveal(int x, int y, bool keepOnScreen)
     {
+        _closing = false;
+        SetClickThrough(false);
         Opacity = 0;
         Show();
         CenterOn(x, y, keepOnScreen);
@@ -217,7 +254,7 @@ internal partial class WheelWindow : Window
     private void Choose(int index)
     {
         var files = _clickFiles;
-        Hide();
+        Dismiss();
         if (index >= 0 && index < _view.Actions.Count)
         {
             var action = _view.Actions[index];
@@ -267,7 +304,7 @@ internal partial class WheelWindow : Window
 
         var files = GetFiles(e);
         int index = _view.HitTest(e.GetPosition(_view));
-        Hide();
+        Dismiss();
 
         if (files != null && index >= 0 && index < _view.Actions.Count)
         {

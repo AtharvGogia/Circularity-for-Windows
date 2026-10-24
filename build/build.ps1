@@ -50,6 +50,7 @@ New-Item -ItemType Directory -Force $licenses | Out-Null
 Copy-Item (Join-Path $PSScriptRoot "ffmpeg\out\licenses\*") $licenses
 Copy-Item (Join-Path $installerDir "licenses\*") $licenses
 Copy-Item (Join-Path $installerDir "THIRD-PARTY-NOTICES.txt") $appDir
+Copy-Item (Join-Path $root "LICENSE") (Join-Path $appDir "LICENSE.txt")
 
 # 4. Microsoft's WebView2 bootstrapper (the installer runs it only on PCs that lack WebView2).
 $bootstrapper = Join-Path $installerDir "MicrosoftEdgeWebview2Setup.exe"

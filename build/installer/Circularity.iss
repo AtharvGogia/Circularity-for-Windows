@@ -77,6 +77,8 @@ Root: HKCU; Subkey: "Software\Classes\*\shell\Circularity\command"; ValueType: s
 Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; \
     StatusMsg: "Installing Microsoft Edge WebView2..."; Check: NeedsWebView2; Flags: waituntilterminated
 Filename: "{app}\Circularity.exe"; Description: "Start Circularity now"; Flags: nowait postinstall skipifsilent
+; In-app updates run this installer with /SILENT /RELAUNCH=1: start the new version when done.
+Filename: "{app}\Circularity.exe"; Flags: nowait; Check: ShouldRelaunch
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/im Circularity.exe /f"; Flags: runhidden; RunOnceId: "StopCircularity"
@@ -84,6 +86,11 @@ Filename: "{sys}\taskkill.exe"; Parameters: "/im Circularity.exe /f"; Flags: run
 [Code]
 const
   WebView2Client = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+
+function ShouldRelaunch: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;
 
 function WebView2Version(Root: Integer; Key: String): String;
 begin

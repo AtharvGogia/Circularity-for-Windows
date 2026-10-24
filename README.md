@@ -3,9 +3,23 @@
 A file converter for Windows that lives at your cursor: drag a file, tap right-click (or Shift)
 mid-drag, and drop it on a button in the wheel that pops up around it.
 
-Made by **Atharv Gogia**.
+![Dragging a photo, tapping right-click, and dropping it on WebP](docs/media/drag.gif)
 
-The app is in `src/Circularity`. Packaging it as an installable app comes later.
+Everything happens on your PC: nothing is uploaded, and the original file is never changed.
+
+Made by **Atharv Gogia**. Open source under the [MIT licence](LICENSE).
+
+## Download
+
+Get `CircularitySetup-x.y.z.exe` from the
+[Releases page](https://github.com/AtharvGogia/Circularity-for-Windows/releases) and run it. It
+installs for your user only (no admin prompt) and includes everything it needs. Windows 10 (1809 or
+later) or Windows 11, 64-bit.
+
+The installer isn't code-signed, so Windows SmartScreen may say "Windows protected your PC" the
+first time: choose **More info → Run anyway**.
+
+To update later, right-click the tray icon → **Check for updates…** (or use the button in Settings).
 
 ## What it does
 
@@ -25,6 +39,9 @@ A tray app that:
 
    **Without dragging**, the same wheel opens at the cursor in click mode: hover and click a button,
    or use the arrow keys and Enter; Esc, the centre or clicking elsewhere cancels. Three ways in:
+
+   ![Selecting a PDF, pressing Ctrl+Alt+C and picking TXT with the arrow keys](docs/media/keyboard.gif)
+
    - **Ctrl+Alt+C** with files selected in File Explorer (any tab) or on the desktop
    - **Right-click → Convert with Circularity** (added by the installer; on Windows 11 it's under
      "Show more options")
@@ -74,7 +91,11 @@ The first time Circularity starts, a short welcome explains the gestures.
 
 ### Settings
 
-Double-click the tray icon (or right-click → **Settings…**) for:
+![The wheel in different accent colours, dark and light](docs/media/appearance.gif)
+
+Double-click the tray icon (or right-click → **Settings…**) for the following. The wheel preview in
+Settings is live: hover and click it, and switch it between image, video, audio and document files.
+
 
 - **theme**: same as Windows (follows it live), light or dark, for the wheel and every window
 - wheel **size** (200–360 px) and **background opacity**
@@ -98,7 +119,7 @@ It produces, in `artifacts\`:
 
 | Output | What it is | Size |
 | --- | --- | --- |
-| `artifacts\CircularitySetup-0.2.0.exe` | The installer to hand out | ~64 MB |
+| `artifacts\CircularitySetup-0.3.0.exe` | The installer to hand out | ~64 MB |
 | `artifacts\Circularity\Circularity.exe` | The app itself, in a self-contained folder that also runs without installing (e.g. from a USB stick) | ~214 MB folder |
 
 The installer:
@@ -189,6 +210,14 @@ dotnet run --project src/EngineSmokeTest -- --drag-test
 registration, click mode by keyboard, and reading the selection from a real File Explorer window
 (an Explorer window and the wheel flash up briefly; run it with Circularity closed).
 
+`--update-test <installer.exe>` checks the updater against fake GitHub responses (newer / same /
+no releases), refuses downloads from anywhere but github.com, rejects a fake installer and accepts
+the real one, then asks the real GitHub API once.
+
+`--render-readme-media docs\media` re-renders the GIFs in this README from the real wheel and its
+animations (nothing on screen is recorded). `--write-icon src\Circularity\Assets\Circularity.ico`
+regenerates the app icon.
+
 `--startup-test` checks the start-at-sign-in toggle against the real registry, then restores
 whatever was there before.
 
@@ -242,3 +271,20 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 | `WelcomeWindow.xaml(.cs)` | The first-run welcome. |
 | `StartAtSignIn.cs` | The start-at-sign-in toggle (shared with the installer). |
 | `App.xaml.cs` | Tray icon and menu, gesture checks, routing wheel buttons to dialogs and the queue, notifications. |
+| `UpdateChecker.cs` / `UpdateWindow.xaml(.cs)` | "Check for updates": GitHub Releases, download, verify, upgrade. |
+
+## Publishing a release
+
+The in-app updater looks at this repository's latest GitHub release, so a release must:
+
+1. be tagged with the version, e.g. `v0.3.0` (matching `<Version>` in `src/Circularity/Circularity.csproj`), and
+2. have the installer from `build\build.ps1`, `CircularitySetup-0.3.0.exe`, attached as an asset.
+
+Whatever is written in the release's description is shown in the update window as "what's new".
+The repository has to be public for the updater to see releases.
+
+## Licence
+
+Circularity is open source under the [MIT licence](LICENSE): © 2026 Atharv Gogia. The installer
+bundles third-party components under their own licences (FFmpeg under the LGPL, and others);
+they're listed in `build/installer/THIRD-PARTY-NOTICES.txt` and ship in the app's `licenses` folder.

@@ -1,0 +1,29 @@
+<Window x:Class="Circularity.UpdateWindow"
+        x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Circularity updates"
+        Width="480" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        ThemeMode="System">
+    <StackPanel Margin="24">
+        <TextBlock x:Name="Heading" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" Text="Checking for updates…" />
+        <TextBlock x:Name="Detail" Opacity="0.75" Margin="0,6,0,0" TextWrapping="Wrap" />
+
+        <Border x:Name="NotesBox" Visibility="Collapsed" Margin="0,16,0,0" Padding="12" CornerRadius="6"
+                BorderThickness="1" BorderBrush="#40808080" MaxHeight="220">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <TextBlock x:Name="Notes" TextWrapping="Wrap" />
+            </ScrollViewer>
+        </Border>
+
+        <ProgressBar x:Name="Progress" Height="4" Margin="0,18,0,0" IsIndeterminate="True" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+            <Button x:Name="ReleasePageButton" Content="View on GitHub" Margin="0,0,8,0" Visibility="Collapsed" Click="ReleasePage_Click" />
+            <Button x:Name="InstallButton" Content="Download and install" Margin="0,0,8,0" Visibility="Collapsed" Click="Install_Click" />
+            <Button x:Name="CloseButton" Content="Close" IsCancel="True" MinWidth="96" Click="Close_Click" />
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -30,7 +30,12 @@ internal sealed class WheelView : Canvas
     public const int CenterIndex = -2;
 
     private static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
-    private static readonly Duration HoverDuration = TimeSpan.FromMilliseconds(110);
+    private static readonly Duration HoverIn = TimeSpan.FromMilliseconds(130);
+    private static readonly Duration HoverOut = TimeSpan.FromMilliseconds(180);
+    private static readonly Duration IntroFade = TimeSpan.FromMilliseconds(120);
+    private static readonly Duration IntroGrow = TimeSpan.FromMilliseconds(220);
+    private static readonly Duration Outro = TimeSpan.FromMilliseconds(110);
+    private static readonly Color CancelHot = Color.FromArgb(0x70, 0xE5, 0x48, 0x4D);
 
     private readonly Ellipse _disc;
     private readonly Canvas _layer = new() { IsHitTestVisible = false };
@@ -39,11 +44,11 @@ internal sealed class WheelView : Canvas
     private WheelAction[] _actions = Array.Empty<WheelAction>();
     private string _centerLabel = "";
     private Ellipse? _centerDisc;
+    private SolidColorBrush? _centerFill;
     private int _hot = -1;
 
-    /// <summary>The drawn parts of one button, and its resting and hovered outlines, so hover can swap them.</summary>
-    private sealed record WheelButton(
-        Canvas Group, Path Shape, WheelAction Action, Geometry RestingShape, Geometry HoveredShape, double CornerStroke, double MidAngle);
+    /// <summary>The animated parts of one button: its accent glow, its label colour, and where it points.</summary>
+    private sealed record WheelButton(Canvas Group, Path Glow, SolidColorBrush Text, double MidAngle);
 
     /// <summary>Colours for one theme. Disc colours get their alpha from the opacity setting.</summary>
     private sealed record Palette(
@@ -152,60 +157,66 @@ internal sealed class WheelView : Canvas
         Highlight(_hot, true);
     }
 
-    /// <summary>Quick fade-and-grow when the wheel appears.</summary>
+    /// <summary>Fade in and grow with a slight overshoot when the wheel appears.</summary>
     public void PlayIntro()
     {
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        var duration = TimeSpan.FromMilliseconds(140);
-        BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
+        BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, IntroFade) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
+        var grow = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 };
         var scale = (ScaleTransform)RenderTransform;
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.86, 1, duration) { EasingFunction = ease });
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.86, 1, duration) { EasingFunction = ease });
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.82, 1, IntroGrow) { EasingFunction = grow });
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.82, 1, IntroGrow) { EasingFunction = grow });
     }
 
+    /// <summary>A brief flash on a button, as feedback for a click that doesn't actually do anything (previews).</summary>
+    public void Flash(int index)
+    {
+        if (index < 0 || index >= _buttons.Count)
+            return;
+        var flash = new DoubleAnimation(0.45, 1, TimeSpan.FromMilliseconds(240)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
+        _buttons[index].Glow.BeginAnimation(OpacityProperty, flash);
+    }
+
+    /// <summary>Quick fade and shrink when the wheel goes away; <paramref name="done"/> runs at the end.</summary>
+    public void PlayOutro(Action done)
+    {
+        var ease = new CubicEase { EasingMode = EasingMode.EaseIn };
+        var fade = new DoubleAnimation(0, Outro) { EasingFunction = ease };
+        fade.Completed += (_, _) => done();
+        BeginAnimation(OpacityProperty, fade);
+        var scale = (ScaleTransform)RenderTransform;
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.92, Outro) { EasingFunction = ease });
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.92, Outro) { EasingFunction = ease });
+    }
+
+    /// <summary>
+    /// Hover blends rather than snaps: the accent "glow" (the segment grown out to the disc's rim, with
+    /// square outer corners) fades in over the resting segment, the label's colour crossfades, and the
+    /// button slides out a little so it pops just past the disc's edge. Leaving reverses it, a bit slower.
+    /// </summary>
     private void Highlight(int index, bool on)
     {
-        if (index == CenterIndex && _centerDisc != null)
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var duration = on ? HoverIn : HoverOut;
+
+        if (index == CenterIndex && _centerFill != null)
         {
-            _centerDisc.Fill = new SolidColorBrush(on ? Color.FromArgb(0x70, 0xE5, 0x48, 0x4D) : _palette.CenterFill);
+            _centerFill.BeginAnimation(SolidColorBrush.ColorProperty,
+                new ColorAnimation(on ? CancelHot : _palette.CenterFill, duration) { EasingFunction = ease });
             return;
         }
         if (index < 0 || index >= _buttons.Count)
             return;
 
         var button = _buttons[index];
-        if (on)
-        {
-            // The hovered segment grows out to the rim: its outer edge follows the disc's own edge,
-            // with square outer corners, while the inner corners stay rounded.
-            var accent = _settings.Accent;
-            button.Shape.Data = button.HoveredShape;
-            button.Shape.StrokeThickness = 0;
-            Paint(button.Shape, accent);
-            TextElement.SetForeground(button.Group, new SolidColorBrush(ContrastText(accent)));
-        }
-        else
-        {
-            button.Shape.Data = button.RestingShape;
-            button.Shape.StrokeThickness = button.CornerStroke;
-            ApplyRestingStyle(button);
-        }
+        button.Glow.BeginAnimation(OpacityProperty, new DoubleAnimation(on ? 1 : 0, duration) { EasingFunction = ease });
+        button.Text.BeginAnimation(SolidColorBrush.ColorProperty,
+            new ColorAnimation(on ? ContrastText(_settings.Accent) : _palette.Text, duration) { EasingFunction = ease });
 
-        // ...and slides out a little, so it pops just past the disc's edge.
         double push = on ? _settings.WheelSize * 0.016 : 0;
         double rad = button.MidAngle * Math.PI / 180;
         var shift = (TranslateTransform)button.Group.RenderTransform;
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        shift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(push * Math.Sin(rad), HoverDuration) { EasingFunction = ease });
-        shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-push * Math.Cos(rad), HoverDuration) { EasingFunction = ease });
-    }
-
-    private void ApplyRestingStyle(WheelButton button)
-    {
-        var accent = _settings.Accent;
-        // Tools are tinted with the accent so they read as a different kind of button.
-        Paint(button.Shape, button.Action.IsTool ? WithAlpha(accent, 0x48) : _palette.Segment);
-        TextElement.SetForeground(button.Group, new SolidColorBrush(_palette.Text));
+        shift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(push * Math.Sin(rad), duration) { EasingFunction = ease });
+        shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-push * Math.Cos(rad), duration) { EasingFunction = ease });
     }
 
     /// <summary>
@@ -255,16 +266,22 @@ internal sealed class WheelView : Canvas
             var action = _actions[i];
             double mid = i * step;
 
-            var resting = n == 1 ? Ring(inner + corner, outer - corner) : Segment(mid - step / 2, mid + step / 2, inner, outer, gap, corner);
-            var hovered = n == 1 ? Ring(inner, Radius) : RimSegment(mid - step / 2, mid + step / 2, inner, gap, corner);
-            resting.Freeze();
-            hovered.Freeze();
             var shape = new Path
             {
-                Data = resting,
+                Data = n == 1 ? Ring(inner + corner, outer - corner) : Segment(mid - step / 2, mid + step / 2, inner, outer, gap, corner),
                 StrokeThickness = corner * 2,
                 StrokeLineJoin = PenLineJoin.Round,
             };
+            // Tools are tinted with the accent so they read as a different kind of button.
+            Paint(shape, action.IsTool ? WithAlpha(_settings.Accent, 0x48) : _palette.Segment);
+
+            var glow = new Path
+            {
+                Data = n == 1 ? Ring(inner, Radius) : RimSegment(mid - step / 2, mid + step / 2, inner, gap, corner),
+                Fill = new SolidColorBrush(_settings.Accent),
+                Opacity = 0,
+            };
+            var text = new SolidColorBrush(_palette.Text);
 
             var content = new StackPanel
             {
@@ -286,21 +303,21 @@ internal sealed class WheelView : Canvas
             SetLeft(content, at.X - content.DesiredSize.Width / 2);
             SetTop(content, at.Y - content.DesiredSize.Height / 2);
 
-            var group = new Canvas { RenderTransform = new TranslateTransform(), Children = { shape, content } };
-            var button = new WheelButton(group, shape, action, resting, hovered, corner * 2, mid);
-            ApplyRestingStyle(button);
+            var group = new Canvas { RenderTransform = new TranslateTransform(), Children = { shape, glow, content } };
+            TextElement.SetForeground(group, text);
             _layer.Children.Add(group);
-            _buttons.Add(button);
+            _buttons.Add(new WheelButton(group, glow, text, mid));
         }
 
+        _centerFill = new SolidColorBrush(_palette.CenterFill);
         _centerDisc = new Ellipse
         {
             Width = CenterRadius * 2,
             Height = CenterRadius * 2,
+            Fill = _centerFill,
             Stroke = new SolidColorBrush(_palette.CenterStroke),
             StrokeThickness = 1,
         };
-        Highlight(CenterIndex, false);
         SetLeft(_centerDisc, Mid - CenterRadius);
         SetTop(_centerDisc, Mid - CenterRadius);
         _layer.Children.Add(_centerDisc);

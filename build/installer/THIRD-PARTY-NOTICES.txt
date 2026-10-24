@@ -1,5 +1,7 @@
 Circularity
 Copyright (c) 2026 Atharv Gogia
+Open source under the MIT licence (LICENSE.txt next to this file).
+Source code: https://github.com/AtharvGogia/Circularity-for-Windows
 
 Circularity includes the following third-party software. Their licence texts are in the
 "licenses" folder next to this file.

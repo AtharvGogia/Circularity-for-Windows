@@ -39,6 +39,7 @@ public partial class App : Application
     private Forms.NotifyIcon? _tray;
     private Forms.ToolStripMenuItem? _cancelItem;
     private SettingsWindow? _settingsWindow;
+    private UpdateWindow? _updateWindow;
     private InstanceChannel? _channel;
     private GlobalHotkey? _hotkey;
     private bool _dialogOpen;
@@ -108,7 +109,7 @@ public partial class App : Application
         _hook = new GestureHook { ShouldArm = ShouldArm };
         _hook.Triggered += (x, y, _) => Dispatcher.BeginInvoke(() =>
         {
-            if (!_wheel.IsVisible)
+            if (!_wheel.IsOpen)
                 _wheel.ShowAt(x, y);
         });
         _hook.DragEnded += () => Dispatcher.BeginInvoke(() => _wheel.OnDragEnded());
@@ -421,15 +422,30 @@ public partial class App : Application
             return;
         }
 
-        _settingsWindow = Dialog(new SettingsWindow(_settings));
+        _settingsWindow = Dialog(new SettingsWindow(_settings, _queue!.CanHandle));
         _settingsWindow.SettingsChanged += settings =>
         {
             ApplySettings(settings);
             settings.Save();
         };
+        _settingsWindow.CheckForUpdatesRequested += OpenUpdates;
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
         WindowHelpers.ForceForeground(_settingsWindow);
+    }
+
+    private void OpenUpdates()
+    {
+        if (_updateWindow != null)
+        {
+            _updateWindow.Activate();
+            return;
+        }
+        _updateWindow = Dialog(new UpdateWindow());
+        // The installer replaces this copy's files and starts the new version afterwards.
+        _updateWindow.InstallerStarted += () => Shutdown();
+        _updateWindow.Closed += (_, _) => _updateWindow = null;
+        _updateWindow.Show();
     }
 
     /// <summary>Shows what's converting in the tray tooltip and enables "Cancel conversions".</summary>
@@ -521,6 +537,7 @@ public partial class App : Application
         var menu = new Forms.ContextMenuStrip();
 
         menu.Items.Add("Settings…", null, (_, _) => OpenSettings());
+        menu.Items.Add("Check for updates…", null, (_, _) => OpenUpdates());
 
         var pause = new Forms.ToolStripMenuItem("Pause gestures") { CheckOnClick = true };
         pause.CheckedChanged += (_, _) =>

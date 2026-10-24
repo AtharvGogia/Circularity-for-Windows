@@ -13,33 +13,46 @@ internal partial class SettingsWindow : Window
     /// <summary>Raised on every change with a copy of the new settings.</summary>
     public event Action<Settings>? SettingsChanged;
 
+    /// <summary>Raised when "Check for updates" is clicked.</summary>
+    public event Action? CheckForUpdatesRequested;
+
     private static readonly string[] Palette =
     {
         "#FF8A1E", "#F43F5E", "#EC4899", "#8B5CF6", "#3B82F6", "#06B6D4", "#14B8A6", "#22C55E", "#EAB308", "#94A3B8",
     };
 
-    private static readonly WheelAction[] PreviewActions =
-    {
-        new(WheelActionKind.Convert, "PNG", Glyphs.Photo, "png"),
-        new(WheelActionKind.Convert, "JPG", Glyphs.Photo, "jpg"),
-        new(WheelActionKind.Convert, "GIF", Glyphs.Gif, "gif"),
-        new(WheelActionKind.Convert, "TIFF", Glyphs.Photo, "tiff"),
-        new(WheelActionKind.Resize, "Resize", Glyphs.Resize),
-        new(WheelActionKind.Crop, "Crop", Glyphs.Crop),
-    };
-
     private readonly WheelView _preview = new();
+    private readonly Func<string, Engine.Operation, bool> _canHandle;
     private Settings _settings;
     private bool _loading;
 
-    public SettingsWindow(Settings current)
+    /// <param name="canHandle">What this PC can convert, so the preview shows the same buttons as the real wheel.</param>
+    public SettingsWindow(Settings current, Func<string, Engine.Operation, bool>? canHandle = null)
     {
         InitializeComponent();
         _settings = current.Clone();
+        _canHandle = canHandle ?? ((_, _) => true);
 
         _preview.ApplySettings(_settings);
-        _preview.SetActions(PreviewActions, "Image");
+        ShowPreviewFor("photo.jpg");
         _preview.SetHot(0);
+
+        // The preview behaves like the real wheel: hovering lights buttons, clicking one flashes it,
+        // and clicking the centre replays the opening animation.
+        _preview.MouseMove += (_, e) => _preview.SetHot(_preview.HitTest(e.GetPosition(_preview)));
+        _preview.MouseLeave += (_, _) => _preview.SetHot(-1);
+        _preview.MouseLeftButtonUp += (_, e) =>
+        {
+            int index = _preview.HitTest(e.GetPosition(_preview));
+            if (index == WheelView.CenterIndex)
+                _preview.PlayIntro();
+            else
+                _preview.Flash(index);
+        };
+        PreviewImage.Checked += (_, _) => ShowPreviewFor("photo.jpg");
+        PreviewVideo.Checked += (_, _) => ShowPreviewFor("clip.mp4");
+        PreviewAudio.Checked += (_, _) => ShowPreviewFor("song.mp3");
+        PreviewDocument.Checked += (_, _) => ShowPreviewFor("report.docx");
         PreviewHost.Content = _preview;
 
         var version = typeof(SettingsWindow).Assembly.GetName().Version;
@@ -106,6 +119,16 @@ internal partial class SettingsWindow : Window
         OpacityText.Text = $"{Math.Round(_settings.Opacity * 100)}%";
         _preview.ApplySettings(_settings);
         Theme.ApplyTo(this, _settings.Theme);
+    }
+
+    /// <summary>Shows the buttons the real wheel would offer for a file like this one.</summary>
+    private void ShowPreviewFor(string sampleFile)
+    {
+        // Called by RadioButton.Checked while InitializeComponent is still running.
+        if (_preview == null || _canHandle == null)
+            return;
+        var (label, actions) = Formats.ActionsFor(new[] { sampleFile }, _canHandle);
+        _preview.SetActions(actions, label);
     }
 
     private void OnStartupClicked()
@@ -187,4 +210,9 @@ internal partial class SettingsWindow : Window
     }
 
     private void Done_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void CheckForUpdates_Click(object sender, RoutedEventArgs e) => CheckForUpdatesRequested?.Invoke();
+
+    private void SourceCode_Click(object sender, RoutedEventArgs e) =>
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"https://github.com/{UpdateChecker.Repository}") { UseShellExecute = true });
 }

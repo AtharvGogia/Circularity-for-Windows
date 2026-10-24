@@ -84,7 +84,7 @@ internal static class InteractionTest
             Press(wheel, Key.Enter);
             Pump(() => chosen != null, 1000);
             // A .png's first button is JPG (PNG itself isn't offered).
-            Check("arrow + Enter picks the first button", chosen?.Label == "JPG" && !wheel.IsVisible, chosen?.Label ?? "nothing chosen");
+            Check("arrow + Enter picks the first button", chosen?.Label == "JPG" && !wheel.IsOpen, chosen?.Label ?? "nothing chosen");
 
             chosen = null;
             wheel.ShowForFiles(new[] { picture }, cx, cy);
@@ -92,7 +92,9 @@ internal static class InteractionTest
             Press(wheel, Key.Left);
             Press(wheel, Key.Escape);
             Pump(() => false, 300);
-            Check("Esc cancels", chosen == null && !wheel.IsVisible, chosen?.Label ?? "nothing chosen");
+            Check("Esc cancels", chosen == null && !wheel.IsOpen, chosen?.Label ?? "nothing chosen");
+            Pump(() => !wheel.IsVisible, 1500);
+            Check("wheel fades out and closes", !wheel.IsVisible);
             wheel.Close();
 
             // 4. Reading the selection from a real Explorer window.

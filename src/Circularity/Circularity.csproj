@@ -29,7 +29,9 @@
     <Authors>Atharv Gogia</Authors>
     <Company>Atharv Gogia</Company>
     <Copyright>© 2026 Atharv Gogia</Copyright>
-    <Version>0.2.0</Version>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/AtharvGogia/Circularity-for-Windows</RepositoryUrl>
+    <Version>0.3.0</Version>
     <!-- Keep the version plain (e.g. "0.2.0") instead of appending the git commit id. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>

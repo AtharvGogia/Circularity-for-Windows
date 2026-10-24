@@ -14,7 +14,8 @@
         </Grid.ColumnDefinitions>
 
         <!-- Live preview over a colourful backdrop, so the transparency setting is visible. -->
-        <Border Width="400" Height="400" CornerRadius="12" ClipToBounds="True" VerticalAlignment="Top">
+        <StackPanel VerticalAlignment="Top" Width="400">
+        <Border Width="400" Height="400" CornerRadius="12" ClipToBounds="True">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                     <GradientStop Color="#FF5B7FD6" Offset="0" />
@@ -30,15 +31,24 @@
                 <ContentPresenter x:Name="PreviewHost" HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Grid>
         </Border>
+        <WrapPanel Margin="2,12,0,0">
+            <TextBlock Text="Preview as" VerticalAlignment="Center" Opacity="0.75" Margin="0,0,14,0" />
+            <RadioButton x:Name="PreviewImage" Content="Image" GroupName="PreviewKind" IsChecked="True" MinWidth="0" Margin="0,0,14,0" />
+            <RadioButton x:Name="PreviewVideo" Content="Video" GroupName="PreviewKind" MinWidth="0" Margin="0,0,14,0" />
+            <RadioButton x:Name="PreviewAudio" Content="Audio" GroupName="PreviewKind" MinWidth="0" Margin="0,0,14,0" />
+            <RadioButton x:Name="PreviewDocument" Content="Document" GroupName="PreviewKind" MinWidth="0" />
+        </WrapPanel>
+        <TextBlock Text="Hover and click the wheel to try it." Opacity="0.6" Margin="2,6,0,0" />
+        </StackPanel>
 
         <StackPanel Grid.Column="1" Margin="32,0,0,0">
             <TextBlock Text="Wheel" FontSize="20" FontWeight="SemiBold" />
 
             <TextBlock Text="Theme" Margin="0,16,0,4" />
             <WrapPanel>
-                <RadioButton x:Name="SystemTheme" Content="Same as Windows" GroupName="Theme" Margin="0,0,20,0" />
-                <RadioButton x:Name="LightTheme" Content="Light" GroupName="Theme" Margin="0,0,20,0" />
-                <RadioButton x:Name="DarkTheme" Content="Dark" GroupName="Theme" />
+                <RadioButton x:Name="SystemTheme" Content="Same as Windows" GroupName="Theme" MinWidth="0" Margin="0,0,20,0" />
+                <RadioButton x:Name="LightTheme" Content="Light" GroupName="Theme" MinWidth="0" Margin="0,0,20,0" />
+                <RadioButton x:Name="DarkTheme" Content="Dark" GroupName="Theme" MinWidth="0" />
             </WrapPanel>
 
             <TextBlock Text="Size" Margin="0,16,0,4" />
@@ -76,9 +86,15 @@
             </StackPanel>
         </StackPanel>
 
-        <StackPanel VerticalAlignment="Bottom" Margin="2,0,0,6">
-            <TextBlock x:Name="VersionText" FontWeight="SemiBold" />
-            <TextBlock Text="Made by Atharv Gogia" Opacity="0.7" Margin="0,2,0,0" />
-        </StackPanel>
+        <DockPanel VerticalAlignment="Bottom" Width="400" HorizontalAlignment="Left" Margin="2,0,0,6">
+            <Button DockPanel.Dock="Right" Content="Check for updates" Click="CheckForUpdates_Click" VerticalAlignment="Center" />
+            <StackPanel>
+                <TextBlock x:Name="VersionText" FontWeight="SemiBold" />
+                <TextBlock Opacity="0.7" Margin="0,2,0,0">
+                    <Run Text="Made by Atharv Gogia · " />
+                    <Hyperlink Click="SourceCode_Click">Open source on GitHub</Hyperlink>
+                </TextBlock>
+            </StackPanel>
+        </DockPanel>
     </Grid>
 </Window>
