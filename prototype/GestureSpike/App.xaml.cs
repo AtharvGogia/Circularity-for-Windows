@@ -4,16 +4,18 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media.Imaging;
 using GestureSpike.Engine;
 using Forms = System.Windows.Forms;
-using SystemIcons = System.Drawing.SystemIcons;
 
 namespace GestureSpike;
 
 /// <summary>
-/// Tray app that wires the mouse hook to the wheel and the wheel to the conversion queue.
-/// No main window: everything happens through the gesture, the tray icon and its notifications.
+/// Tray app that wires the gesture hook to the wheel, and the wheel to the dialogs and the
+/// conversion queue. No main window: everything happens through the gesture, the tray icon
+/// and its notifications.
 /// </summary>
 public partial class App : Application
 {
@@ -27,12 +29,20 @@ public partial class App : Application
     private const string TrayTitle = "GestureSpike";
 
     private Mutex? _singleInstance;
-    private MouseHook? _hook;
+    private Settings _settings = new();
+    private GestureHook? _hook;
     private WheelWindow? _wheel;
+    private FfmpegConverter? _ffmpeg;
     private ConversionQueue? _queue;
     private Forms.NotifyIcon? _tray;
     private Forms.ToolStripMenuItem? _cancelItem;
+    private SettingsWindow? _settingsWindow;
+    private bool _dialogOpen;
+
+    // Read on the hook thread.
     private volatile bool _paused;
+    private volatile bool _rightClickEnabled;
+    private volatile bool _shiftEnabled;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -47,52 +57,83 @@ public partial class App : Application
         }
 
         Log.Write("---- GestureSpike starting ----");
-        DispatcherUnhandledException += (_, args) => Log.Write($"Unhandled exception: {args.Exception}");
+        DispatcherUnhandledException += (_, args) =>
+        {
+            Log.Write($"Unhandled exception: {args.Exception}");
+            Notify("Something went wrong", args.Exception.Message, Forms.ToolTipIcon.Error);
+            args.Handled = true;
+        };
 
-        var ffmpeg = new FfmpegConverter();
-        Log.Write(ffmpeg.FfmpegPath != null
-            ? $"Using FFmpeg at {ffmpeg.FfmpegPath}"
+        _settings = Settings.Load();
+
+        _ffmpeg = new FfmpegConverter();
+        Log.Write(_ffmpeg.FfmpegPath != null
+            ? $"Using FFmpeg at {_ffmpeg.FfmpegPath}"
             : "FFmpeg not found; video and audio conversions will fail until it's installed.");
 
-        _queue = new ConversionQueue(new IConverter[] { new ImageConverter(), ffmpeg });
+        _queue = new ConversionQueue(new IConverter[] { new ImageConverter(), _ffmpeg });
         _queue.JobChanged += _ => Dispatcher.BeginInvoke(UpdateTrayStatus);
         _queue.BatchFinished += batch => Dispatcher.BeginInvoke(() => ReportBatch(batch));
 
         _wheel = new WheelWindow();
-        _wheel.FormatChosen += (files, target) => _queue.Enqueue(files, target);
+        _wheel.ActionChosen += OnActionChosen;
 
         _tray = CreateTray();
+        ApplySettings(_settings);
 
-        _hook = new MouseHook { ShouldArm = ShouldArm };
-        _hook.ChordDetected += (x, y) => Dispatcher.BeginInvoke(() => _wheel.ShowAt(x, y));
-        _hook.ChordDragEnded += () => Dispatcher.BeginInvoke(() => _wheel.OnDragEnded());
-        Log.Write("Mouse hook installed.");
+        _hook = new GestureHook { ShouldArm = ShouldArm };
+        _hook.Triggered += (x, y, _) => Dispatcher.BeginInvoke(() =>
+        {
+            if (!_wheel.IsVisible)
+                _wheel.ShowAt(x, y);
+        });
+        _hook.DragEnded += () => Dispatcher.BeginInvoke(() => _wheel.OnDragEnded());
+        Log.Write("Gesture hooks installed.");
 
         _tray.ShowBalloonTip(4000, "GestureSpike is running",
-            "Left-drag a file, tap right-click, then drop it on a format.", Forms.ToolTipIcon.Info);
+            "Drag a file and tap right-click (or Shift), then drop it on a button.", Forms.ToolTipIcon.Info);
+    }
+
+    private void ApplySettings(Settings settings)
+    {
+        _settings = settings;
+        _rightClickEnabled = settings.RightClickTrigger;
+        _shiftEnabled = settings.ShiftTrigger;
+        _wheel?.ApplySettings(settings);
+
+        if (_tray != null)
+        {
+            var old = _tray.Icon;
+            _tray.Icon = AppIcon.Create(settings.Accent);
+            old?.Dispose();
+        }
     }
 
     /// <summary>Runs on the hook thread, so it has to stay quick.</summary>
-    private bool ShouldArm()
+    private bool ShouldArm(GestureTrigger trigger)
     {
         if (_paused)
+            return false;
+        if (trigger == GestureTrigger.RightClick && !_rightClickEnabled)
+            return false;
+        if (trigger == GestureTrigger.Shift && !_shiftEnabled)
             return false;
 
         if (Native.SHQueryUserNotificationState(out int state) == 0 &&
             state is Native.QUNS_BUSY or Native.QUNS_RUNNING_D3D_FULL_SCREEN or Native.QUNS_PRESENTATION_MODE)
         {
-            Log.Write($"Chord ignored: a full-screen app is running (state {state}).");
+            Log.Write($"{trigger} ignored: a full-screen app is running (state {state}).");
             return false;
         }
 
         string process = ForegroundProcessName();
         if (!AllowedProcesses.Contains(process))
         {
-            Log.Write($"Chord ignored: foreground app '{process}' is not on the allowlist.");
+            Log.Write($"{trigger} ignored: foreground app '{process}' is not on the allowlist.");
             return false;
         }
 
-        Log.Write($"Chord detected while dragging from '{process}'.");
+        Log.Write($"{trigger} while dragging from '{process}'.");
         return true;
     }
 
@@ -110,6 +151,150 @@ public partial class App : Application
         }
     }
 
+    private async void OnActionChosen(string[] files, WheelAction action)
+    {
+        if (action.Kind == WheelActionKind.Convert)
+        {
+            _queue!.Enqueue(files, new ConvertTo(action.Target!));
+            return;
+        }
+
+        if (_dialogOpen)
+        {
+            Notify("Finish the open window first", "A resize, crop or compress window is already open.", Forms.ToolTipIcon.Info);
+            return;
+        }
+
+        _dialogOpen = true;
+        try
+        {
+            switch (action.Kind)
+            {
+                case WheelActionKind.Resize:
+                    await ResizeAsync(files);
+                    break;
+                case WheelActionKind.Crop:
+                    await CropAsync(files);
+                    break;
+                case WheelActionKind.Compress:
+                    Compress(files);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"{action.Label} failed: {ex}");
+            Notify($"{action.Label} failed", ex.Message, Forms.ToolTipIcon.Warning);
+        }
+        finally
+        {
+            _dialogOpen = false;
+        }
+    }
+
+    private async Task ResizeAsync(string[] files)
+    {
+        (int, int)? size = null;
+        if (files.Length == 1)
+        {
+            try
+            {
+                size = Formats.KindOf(files[0]) == FileKind.Video
+                    ? await _ffmpeg!.ProbeVideoSizeAsync(files[0])
+                    : ImageConverter.ReadSize(files[0]);
+            }
+            catch (Exception ex)
+            {
+                // The dialog works without the current size; it just can't show a preview of the result.
+                Log.Write($"Couldn't read the size of {files[0]}: {ex.Message}");
+            }
+        }
+
+        var dialog = new ResizeDialog(files, size) { Icon = WindowIcon() };
+        if (dialog.ShowDialog() == true && dialog.Result != null)
+            _queue!.Enqueue(files, new ResizeTo(dialog.Result));
+    }
+
+    private void Compress(string[] files)
+    {
+        var dialog = new CompressDialog(files) { Icon = WindowIcon() };
+        if (dialog.ShowDialog() == true && dialog.Result != null)
+            _queue!.Enqueue(files, new CompressTo(dialog.Result));
+    }
+
+    private async Task CropAsync(string[] files)
+    {
+        var items = new List<(string File, Operation Operation)>();
+        for (int i = 0; i < files.Length; i++)
+        {
+            string file = files[i];
+            BitmapSource picture;
+            try
+            {
+                picture = await LoadCropPreviewAsync(file);
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"Couldn't open {file} for cropping: {ex}");
+                Notify("Couldn't open file", $"{Path.GetFileName(file)}: {ex.Message}", Forms.ToolTipIcon.Warning);
+                continue;
+            }
+
+            var window = new CropWindow(picture, Path.GetFileName(file), i + 1, files.Length) { Icon = WindowIcon() };
+            window.ShowDialog();
+            if (window.Outcome == CropOutcome.Cancelled)
+                return;
+            if (window.Outcome == CropOutcome.Cropped)
+                items.Add((file, new CropTo(window.Result)));
+        }
+
+        if (items.Count > 0)
+            _queue!.Enqueue(items);
+    }
+
+    /// <summary>The picture itself, or for a video a frame from about a second in.</summary>
+    private async Task<BitmapSource> LoadCropPreviewAsync(string file)
+    {
+        if (Formats.KindOf(file) != FileKind.Video)
+            return await Task.Run(() => ImageConverter.LoadOriented(file));
+
+        string frame = Path.Combine(Path.GetTempPath(), $"GestureSpike-frame-{Guid.NewGuid():N}.png");
+        try
+        {
+            await _ffmpeg!.ExtractFrameAsync(file, frame);
+            return await Task.Run(() => ImageConverter.LoadOriented(frame));
+        }
+        finally
+        {
+            File.Delete(frame);
+        }
+    }
+
+    private System.Windows.Media.ImageSource WindowIcon()
+    {
+        using var icon = AppIcon.Create(_settings.Accent);
+        return AppIcon.ToImageSource(icon);
+    }
+
+    private void OpenSettings()
+    {
+        if (_settingsWindow != null)
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+
+        _settingsWindow = new SettingsWindow(_settings) { Icon = WindowIcon() };
+        _settingsWindow.SettingsChanged += settings =>
+        {
+            ApplySettings(settings);
+            settings.Save();
+        };
+        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Show();
+        WindowHelpers.ForceForeground(_settingsWindow);
+    }
+
     /// <summary>Shows what's converting in the tray tooltip and enables "Cancel conversions".</summary>
     private void UpdateTrayStatus()
     {
@@ -119,23 +304,16 @@ public partial class App : Application
         var unfinished = _queue.Unfinished;
         _cancelItem!.Enabled = unfinished.Count > 0;
 
-        var running = unfinished.Where(j => j.State == JobState.Running).ToList();
         if (unfinished.Count == 0)
         {
             _tray.Text = TrayTitle;
             return;
         }
 
-        string text;
-        if (running.Count > 0)
-        {
-            var job = running[0];
-            text = $"{Path.GetFileName(job.InputPath)} → {job.Target.ToUpperInvariant()} {job.Progress:P0}";
-        }
-        else
-        {
-            text = "Starting…";
-        }
+        var running = unfinished.FirstOrDefault(j => j.State == JobState.Running);
+        string text = running != null
+            ? $"{Path.GetFileName(running.InputPath)} → {running.Operation.Describe()} {running.Progress:P0}"
+            : "Starting…";
         int others = unfinished.Count - 1;
         if (others > 0)
             text += $" (+{others} more)";
@@ -155,30 +333,45 @@ public partial class App : Application
 
         foreach (var job in jobs)
         {
+            string what = job.Operation.Describe();
             Log.Write(job.State switch
             {
-                JobState.Succeeded => $"Converted {job.InputPath} -> {job.OutputPath}",
-                JobState.Failed => $"Failed {job.InputPath} -> {job.Target}: {job.Error}",
-                _ => $"Cancelled {job.InputPath} -> {job.Target}",
+                JobState.Succeeded => $"{what}: {job.InputPath} -> {job.OutputPath}",
+                JobState.Failed => $"{what} failed for {job.InputPath}: {job.Error}",
+                _ => $"{what} cancelled for {job.InputPath}",
             });
         }
 
         if (failed.Count > 0)
         {
-            string title = failed.Count == jobs.Count ? "Conversion failed" : $"{failed.Count} of {jobs.Count} conversions failed";
+            string title = failed.Count == jobs.Count ? "That didn't work" : $"{failed.Count} of {jobs.Count} files failed";
             Notify(title, failed[0].Error ?? "Unknown error. Details are in the log.", Forms.ToolTipIcon.Warning);
         }
         else if (succeeded.Count > 0)
         {
-            string title = succeeded.Count == 1 ? "Converted" : $"Converted {succeeded.Count} files";
-            string body = string.Join(", ", succeeded.Select(j => Path.GetFileName(j.OutputPath)));
+            string title = succeeded.Count == 1 ? "Done" : $"Done: {succeeded.Count} files";
+            string body = string.Join(", ", succeeded.Select(j => j.Operation is CompressTo
+                ? $"{Path.GetFileName(j.OutputPath)} ({FileSizes.Format(SizeOf(j.InputPath))} → {FileSizes.Format(SizeOf(j.OutputPath!))})"
+                : Path.GetFileName(j.OutputPath)));
             if (cancelled > 0)
                 body += $" ({cancelled} cancelled)";
             Notify(title, body, Forms.ToolTipIcon.Info);
         }
         else
         {
-            Notify("Conversion cancelled", $"{cancelled} file(s) were not converted.", Forms.ToolTipIcon.Info);
+            Notify("Cancelled", $"{cancelled} file(s) were not converted.", Forms.ToolTipIcon.Info);
+        }
+    }
+
+    private static long SizeOf(string path)
+    {
+        try
+        {
+            return new FileInfo(path).Length;
+        }
+        catch (IOException)
+        {
+            return 0;
         }
     }
 
@@ -186,7 +379,9 @@ public partial class App : Application
     {
         var menu = new Forms.ContextMenuStrip();
 
-        var pause = new Forms.ToolStripMenuItem("Pause gesture") { CheckOnClick = true };
+        menu.Items.Add("Settings…", null, (_, _) => OpenSettings());
+
+        var pause = new Forms.ToolStripMenuItem("Pause gestures") { CheckOnClick = true };
         pause.CheckedChanged += (_, _) =>
         {
             _paused = pause.Checked;
@@ -209,17 +404,19 @@ public partial class App : Application
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => Shutdown());
 
-        return new Forms.NotifyIcon
+        var tray = new Forms.NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = AppIcon.Create(_settings.Accent),
             Text = TrayTitle,
             ContextMenuStrip = menu,
             Visible = true,
         };
+        tray.DoubleClick += (_, _) => OpenSettings();
+        return tray;
     }
 
     private void Notify(string title, string text, Forms.ToolTipIcon icon) =>
-        _tray?.ShowBalloonTip(4000, title, text, icon);
+        _tray?.ShowBalloonTip(4000, title, string.IsNullOrEmpty(text) ? " " : text, icon);
 
     protected override void OnExit(ExitEventArgs e)
     {
@@ -229,6 +426,7 @@ public partial class App : Application
         if (_tray != null)
         {
             _tray.Visible = false;
+            _tray.Icon?.Dispose();
             _tray.Dispose();
         }
         Log.Write("---- GestureSpike exiting ----");

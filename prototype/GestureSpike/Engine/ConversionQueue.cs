@@ -10,20 +10,20 @@ namespace GestureSpike.Engine;
 
 internal enum JobState { Queued, Running, Succeeded, Failed, Cancelled }
 
-/// <summary>One file being converted to one format.</summary>
+/// <summary>One operation (convert, resize, crop) applied to one file.</summary>
 internal sealed class ConversionJob
 {
-    internal ConversionJob(ConversionBatch batch, string inputPath, string target, IConverter? converter)
+    internal ConversionJob(ConversionBatch batch, string inputPath, Operation operation, IConverter? converter)
     {
         Batch = batch;
         InputPath = inputPath;
-        Target = target;
+        Operation = operation;
         Converter = converter;
     }
 
     public ConversionBatch Batch { get; }
     public string InputPath { get; }
-    public string Target { get; }
+    public Operation Operation { get; }
 
     /// <summary>The file written, once the job has succeeded.</summary>
     public string? OutputPath { get; internal set; }
@@ -95,11 +95,17 @@ internal sealed class ConversionQueue : IDisposable
         }
     }
 
-    public ConversionBatch Enqueue(IReadOnlyList<string> files, string target)
+    /// <summary>Applies the same operation to every file.</summary>
+    public ConversionBatch Enqueue(IReadOnlyList<string> files, Operation operation) =>
+        Enqueue(files.Select(file => (file, operation)).ToList());
+
+    /// <summary>Queues one batch where each file can have its own operation (e.g. its own crop).</summary>
+    public ConversionBatch Enqueue(IReadOnlyList<(string File, Operation Operation)> items)
     {
         var batch = new ConversionBatch();
-        var jobs = files
-            .Select(file => new ConversionJob(batch, file, target, _converters.FirstOrDefault(c => c.CanConvert(file, target))))
+        var jobs = items
+            .Select(item => new ConversionJob(batch, item.File, item.Operation,
+                _converters.FirstOrDefault(c => c.CanHandle(item.File, item.Operation))))
             .ToList();
         batch.SetJobs(jobs);
 
@@ -107,8 +113,7 @@ internal sealed class ConversionQueue : IDisposable
         {
             if (job.Converter == null)
             {
-                string ext = Path.GetExtension(job.InputPath).TrimStart('.').ToUpperInvariant();
-                Finish(job, JobState.Failed, $"Converting {ext} to {target.ToUpperInvariant()} isn't supported yet.");
+                Finish(job, JobState.Failed, UnsupportedMessage(job));
                 continue;
             }
 
@@ -125,6 +130,14 @@ internal sealed class ConversionQueue : IDisposable
     {
         foreach (var job in Unfinished)
             job.Cancellation.Cancel();
+    }
+
+    private static string UnsupportedMessage(ConversionJob job)
+    {
+        string ext = Path.GetExtension(job.InputPath).TrimStart('.').ToUpperInvariant();
+        return job.Operation is ConvertTo convert
+            ? $"Converting {ext} to {convert.Target.ToUpperInvariant()} isn't supported yet."
+            : $"{job.Operation.Describe()} isn't supported for {ext} files yet.";
     }
 
     private async Task WorkerLoop()
@@ -144,7 +157,8 @@ internal sealed class ConversionQueue : IDisposable
         string? output = null;
         try
         {
-            output = OutputPaths.Reserve(job.InputPath, job.Target);
+            var converter = job.Converter!;
+            output = OutputPaths.Reserve(job.InputPath, converter.OutputExtension(job.InputPath, job.Operation), job.Operation.NameSuffix);
             job.State = JobState.Running;
             JobChanged?.Invoke(job);
 
@@ -153,7 +167,7 @@ internal sealed class ConversionQueue : IDisposable
                 job.Progress = value;
                 JobChanged?.Invoke(job);
             });
-            await job.Converter!.ConvertAsync(job.InputPath, job.Target, output, progress, job.Cancellation.Token);
+            await converter.RunAsync(job.InputPath, job.Operation, output, progress, job.Cancellation.Token);
 
             job.OutputPath = output;
             job.Progress = 1;

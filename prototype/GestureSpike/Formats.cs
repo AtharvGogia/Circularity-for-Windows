@@ -7,14 +7,40 @@ namespace GestureSpike;
 
 internal enum FileKind { Image, Video, Audio, Document, Mixed, Unknown }
 
-/// <summary>Which output formats the wheel offers for a set of dropped files.</summary>
+internal enum WheelActionKind { Convert, Resize, Crop, Compress }
+
+/// <summary>One button on the wheel.</summary>
+internal sealed record WheelAction(WheelActionKind Kind, string Label, string Glyph, string? Target = null)
+{
+    public bool IsTool => Kind != WheelActionKind.Convert;
+}
+
+/// <summary>Icon glyphs from Segoe Fluent Icons (Windows 11) / Segoe MDL2 Assets (Windows 10).</summary>
+internal static class Glyphs
+{
+    public const string Photo = "";
+    public const string Video = "";
+    public const string Music = "";
+    public const string Gif = "";
+    public const string Resize = "";
+    public const string Crop = "";
+    public const string Compress = "";
+    public const string Cancel = "";
+}
+
+/// <summary>Which buttons the wheel offers for a set of dropped files.</summary>
 internal static class Formats
 {
-    // Only image conversion is real in the prototype; these are the formats WPF can write.
     private static readonly string[] ImageTargets = { "png", "jpg", "bmp", "gif", "tiff" };
     private static readonly string[] VideoTargets = { "mp4", "webm", "mov", "gif", "mp3" };
     private static readonly string[] AudioTargets = { "mp3", "wav", "flac", "ogg", "m4a" };
-    private static readonly string[] DocumentTargets = { "pdf", "docx", "txt", "md" };
+
+    private static readonly WheelAction Resize = new(WheelActionKind.Resize, "Resize", Glyphs.Resize);
+    private static readonly WheelAction Crop = new(WheelActionKind.Crop, "Crop", Glyphs.Crop);
+    private static readonly WheelAction Compress = new(WheelActionKind.Compress, "Compress", Glyphs.Compress);
+
+    private static readonly WheelAction[] ImageTools = { Resize, Crop, Compress };
+    private static readonly WheelAction[] VideoTools = { Resize, Crop };
 
     private static readonly Dictionary<string, FileKind> KindByExtension = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -29,7 +55,8 @@ internal static class Formats
         ["m4a"] = FileKind.Audio, ["aac"] = FileKind.Audio, ["wma"] = FileKind.Audio, ["opus"] = FileKind.Audio,
 
         ["docx"] = FileKind.Document, ["doc"] = FileKind.Document, ["odt"] = FileKind.Document,
-        ["rtf"] = FileKind.Document, ["md"] = FileKind.Document, ["txt"] = FileKind.Document, ["html"] = FileKind.Document,
+        ["rtf"] = FileKind.Document, ["md"] = FileKind.Document, ["txt"] = FileKind.Document,
+        ["html"] = FileKind.Document, ["pdf"] = FileKind.Document,
     };
 
     /// <summary>Lower-case extension without the dot, with common aliases folded together.</summary>
@@ -47,14 +74,20 @@ internal static class Formats
     public static FileKind KindOf(string path) =>
         KindByExtension.TryGetValue(Path.GetExtension(path).TrimStart('.'), out var kind) ? kind : FileKind.Unknown;
 
-    public static (FileKind Kind, string[] Targets) For(IReadOnlyList<string> files)
+    /// <summary>The wheel's buttons for these files, and a short description for its centre.</summary>
+    public static (string Label, WheelAction[] Actions) ActionsFor(IReadOnlyList<string> files)
     {
         if (files.Count == 0)
-            return (FileKind.Unknown, Array.Empty<string>());
+            return ("Not a file", Array.Empty<WheelAction>());
 
         var kinds = files.Select(KindOf).Distinct().ToList();
         if (kinds.Count > 1)
-            return (FileKind.Mixed, Array.Empty<string>());
+        {
+            // Resize and crop work on any mix of images and videos; compress is images only.
+            return kinds.All(k => k is FileKind.Image or FileKind.Video)
+                ? ($"{files.Count} files", VideoTools)
+                : ("Mixed file types", Array.Empty<WheelAction>());
+        }
 
         var kind = kinds[0];
         string[] targets = kind switch
@@ -62,7 +95,6 @@ internal static class Formats
             FileKind.Image => ImageTargets,
             FileKind.Video => VideoTargets,
             FileKind.Audio => AudioTargets,
-            FileKind.Document => DocumentTargets,
             _ => Array.Empty<string>(),
         };
 
@@ -71,6 +103,26 @@ internal static class Formats
         if (sourceExts.Count == 1)
             targets = targets.Where(t => t != sourceExts[0]).ToArray();
 
-        return (kind, targets);
+        var actions = targets.Select(t => new WheelAction(WheelActionKind.Convert, t.ToUpperInvariant(), GlyphFor(t), t));
+        if (kind == FileKind.Image)
+            actions = actions.Concat(ImageTools);
+        else if (kind == FileKind.Video)
+            actions = actions.Concat(VideoTools);
+
+        string label = kind switch
+        {
+            FileKind.Document => "Documents coming soon",
+            FileKind.Unknown => "Unsupported type",
+            _ => files.Count == 1 ? kind.ToString() : $"{files.Count} {kind.ToString().ToLowerInvariant()}s",
+        };
+        return (label, actions.ToArray());
     }
+
+    private static string GlyphFor(string target) => target switch
+    {
+        "gif" => Glyphs.Gif,
+        "mp4" or "webm" or "mov" => Glyphs.Video,
+        "mp3" or "wav" or "flac" or "ogg" or "m4a" => Glyphs.Music,
+        _ => Glyphs.Photo,
+    };
 }

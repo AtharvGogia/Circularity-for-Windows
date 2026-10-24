@@ -1,8 +1,8 @@
 <Window x:Class="GestureSpike.WheelWindow"
+        x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Convert"
-        Width="340" Height="340"
         Left="-10000" Top="-10000"
         WindowStyle="None"
         ResizeMode="NoResize"
@@ -12,7 +12,5 @@
         ShowInTaskbar="False"
         ShowActivated="False"
         AllowDrop="True">
-    <!-- Everything is drawn in code-behind. Only the base disc is hit-testable,
-         so drag events don't flicker as the cursor crosses wedges and labels. -->
-    <Canvas x:Name="Root" Width="340" Height="340" />
+    <!-- Content is a WheelView, set in code-behind. -->
 </Window>
