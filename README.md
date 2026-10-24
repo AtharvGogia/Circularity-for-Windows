@@ -1,10 +1,11 @@
-# File Converter for Windows
+# Circularity
 
-A Tangerine-style file converter for Windows: drag a file, tap right-click (or Shift) mid-drag,
-and drop it on a button in a wheel that pops up around your cursor.
+A file converter for Windows that lives at your cursor: drag a file, tap right-click (or Shift)
+mid-drag, and drop it on a button in the wheel that pops up around it.
 
-Right now this repo holds a working **prototype**, `prototype/GestureSpike`. Packaging it as a
-shippable app comes later.
+Made by **Atharv Gogia**.
+
+The app is in `src/Circularity`. Packaging it as an installable app comes later.
 
 ## What it does
 
@@ -22,7 +23,7 @@ A tray app that:
    real drop target: keep dragging onto a button and release. Dropping in the middle cancels;
    dragging off the wheel dismisses it, and the drag carries on as normal.
 4. Runs the job in the background:
-   - **Images** → PNG, JPG, BMP, GIF, TIFF (Windows Imaging Component)
+   - **Images** → PNG, JPG, BMP, GIF, TIFF (Windows Imaging Component), PDF
    - **Video** → MP4, WebM, MOV, GIF, MP3 (FFmpeg)
    - **Audio** → MP3, WAV, FLAC, OGG, M4A (FFmpeg)
    - **Resize** (images and video): to a width × height, keeping the aspect ratio (fit inside) or
@@ -34,10 +35,23 @@ A tray app that:
    - **Crop** (images and video): opens an editor with a crop box you can move, resize from any
      corner or edge, or redraw, optionally locked to 1:1, 4:3, 3:2, 16:9 or 9:16. Videos are
      shown as a frame from about one second in. Several files are cropped one after another.
-   - Documents: not yet (the wheel says "Documents coming soon").
+   - **Documents**, with nothing extra to install:
+     - **PDF** → PNG / JPG (one image per page; several pages go into a `name (pages)` folder) using
+       Windows' own PDF renderer, and → TXT using PdfPig
+     - **Markdown** → PDF or HTML, **HTML** → PDF, **TXT** → PDF, laid out by Edge (WebView2), on
+       A4 or US Letter depending on your region
+   - **Documents through Microsoft Office**, when it's installed (otherwise these buttons don't appear):
+     - **Word**: DOCX / DOC / RTF / ODT → PDF, DOCX, TXT
+     - **Excel**: XLSX / XLS / ODS / CSV → PDF
+     - **PowerPoint**: PPTX / PPT / ODP → PDF
+
+     Office runs invisibly. If you already had that Office app open, your copy is used and left
+     open. A password-protected file fails straight away instead of asking for a password, and an
+     Office job that hangs is stopped after 3 minutes.
+   - **Combine** (two or more images and/or PDFs): one PDF with every page, in the order dropped.
 
 Results are saved as new copies next to the original: `photo.png`, `photo (resized).jpg`,
-`photo (cropped).jpg`, `photo (compressed).jpg`, with ` (1)`, ` (2)`... if the name is taken. The original is never touched:
+`photo (cropped).jpg`, `photo (compressed).jpg`, `scan (combined).pdf`, with ` (1)`, ` (2)`... if the name is taken. The original is never touched:
 the wheel always answers the drag with "Copy", never "Move".
 
 While something is running, hover the tray icon to see progress
@@ -48,13 +62,64 @@ failed job leaves no half-written file behind. You get one notification per drop
 
 Double-click the tray icon (or right-click → **Settings…**) for:
 
+- **theme**: same as Windows (follows it live), light or dark, for the wheel and every window
 - wheel **size** (200–360 px) and **background opacity**
 - **accent colour**: presets or any custom colour; the tray icon follows it
 - which **gestures** are on (right-click, Shift)
+- **start at sign-in**: the same Windows sign-in entry the installer's checkbox creates, so the two
+  always agree; it also notices (and, when ticked, undoes) "Disabled" in Task Manager's Startup apps
 
-Changes apply live, with a preview, and are saved to `%APPDATA%\GestureSpike\settings.json`.
+Changes apply live, with a preview, and are saved to `%APPDATA%\Circularity\settings.json`.
 
-## Run it
+## Build the installer
+
+One command builds everything users need, with .NET and FFmpeg included:
+
+```bash
+powershell -ExecutionPolicy Bypass -File build\build.ps1
+```
+
+It produces, in `artifacts\`:
+
+| Output | What it is | Size |
+| --- | --- | --- |
+| `artifacts\CircularitySetup-0.1.0.exe` | The installer to hand out | ~64 MB |
+| `artifacts\Circularity\Circularity.exe` | The app itself, in a self-contained folder that also runs without installing (e.g. from a USB stick) | ~214 MB folder |
+
+The installer:
+
+- installs for the current user, so there's no admin prompt, into
+  `%LOCALAPPDATA%\Programs\Circularity\Circularity.exe`
+- adds a Start menu shortcut, and optionally starts Circularity at sign-in and a desktop shortcut
+- installs Microsoft's WebView2 only on the rare PC that doesn't have it (Windows 11 always does)
+- appears in **Settings → Apps** with a normal uninstaller, which also removes the sign-in entry
+
+It isn't code-signed, so Windows SmartScreen shows "Windows protected your PC" the first time;
+users click **More info → Run anyway**.
+
+One-time setup for building it:
+
+```bash
+winget install Microsoft.DotNet.SDK.10
+```
+
+```bash
+winget install JRSoftware.InnoSetup
+```
+
+```bash
+winget install MSYS2.MSYS2
+```
+
+MSYS2 is only needed to compile FFmpeg, which happens once (a few minutes) and is reused after
+that; `build\build.ps1 -RebuildFfmpeg` forces a fresh one. That FFmpeg (`build\ffmpeg\build-ffmpeg.sh`)
+is a slim LGPL build, 29 MB instead of the usual 230 MB: only the encoders, containers and filters
+Circularity uses, every decoder so it still reads almost anything, and H.264 encoding through
+Windows' built-in encoder instead of the GPL x264. It needs only DLLs that come with Windows.
+Licences for everything bundled are in `build\installer` and ship in the app's `licenses` folder,
+listed in `THIRD-PARTY-NOTICES.txt`.
+
+## Run it for development
 
 Needs the .NET 10 SDK, and FFmpeg for video/audio:
 
@@ -66,27 +131,34 @@ The app looks for `ffmpeg.exe` in `FFMPEG_PATH`, next to the app, in a `tools\` 
 then on `PATH`.
 
 ```bash
-dotnet run --project prototype/GestureSpike
+dotnet run --project src/Circularity
 ```
 
-A tray icon appears with a "GestureSpike is running" notification. Right-click it for
+That development build lands in `src\Circularity\bin\Debug\net10.0-windows10.0.19041.0\Circularity.exe`
+and needs .NET 10 installed; the installer above is what to give other people.
+
+A tray icon appears with a "Circularity is running" notification. Right-click it for
 **Settings…**, **Pause gestures**, **Cancel conversions**, **Open log** and **Exit**.
 
 ## Test it
 
 A console harness generates sample video, audio and image files with FFmpeg, runs every supported
 conversion, resize, crop and compression through the real queue, and checks the outputs decode
-cleanly, have the right pixel sizes, and fit under the requested file size. It also checks naming, unsupported formats, batches, progress and cancellation.
+cleanly, have the right pixel sizes, and fit under the requested file size. It also checks naming,
+unsupported formats, batches, progress and cancellation.
 
 ```bash
-dotnet run --project prototype/EngineSmokeTest
+dotnet run --project src/EngineSmokeTest
 ```
+
+To test against the slim FFmpeg that ships in the installer, point `FFMPEG_PATH` at it first
+(`$env:FFMPEG_PATH = "build\ffmpeg\out\bin\ffmpeg.exe"` in PowerShell).
 
 It can also render the wheel, the settings window and the resize / compress / crop dialogs to
 PNGs, to check the look:
 
 ```bash
-dotnet run --project prototype/EngineSmokeTest -- --render-previews previews
+dotnet run --project src/EngineSmokeTest -- --render-previews previews
 ```
 
 And it can do a real drag-and-drop onto the wheel with synthetic mouse input, checking that
@@ -94,10 +166,13 @@ dropping on a button picks it and that dragging off dismisses the wheel. **It mo
 a few seconds**, so keep your hands off it while it runs:
 
 ```bash
-dotnet run --project prototype/EngineSmokeTest -- --drag-test
+dotnet run --project src/EngineSmokeTest -- --drag-test
 ```
 
-Everything the hooks decide is written to `%LOCALAPPDATA%\GestureSpike\log.txt`.
+`--startup-test` checks the start-at-sign-in toggle against the real registry, then restores
+whatever was there before.
+
+Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 
 ## Known limits
 
@@ -108,9 +183,15 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\GestureSpike\log.txt`.
 - HEIC and WebP input need Microsoft's free HEIF / WebP image extensions installed. They can't
   be written, so resizing or cropping them produces a JPG.
 - Animated GIFs are edited as their first frame only.
-- Licensing, before shipping: the Gyan FFmpeg build is GPL because it includes x264. Bundling it
-  means the app must be GPL too; a closed-source app needs an LGPL FFmpeg build and a different
-  H.264 encoder (e.g. OpenH264 or the GPU's hardware encoder).
+- Licensing: the FFmpeg bundled in the installer is LGPL (see above), so Circularity can stay
+  closed-source. The Gyan "full" FFmpeg suggested for development is GPL; don't ship that one.
+- The other libraries are fine for a closed-source app: PdfPig (Apache-2.0), Markdig (BSD-2-Clause),
+  WebView2 (Microsoft's redistributable licence). PDFsharp was deliberately not used: from 6.5 it's
+  AGPL, which would force the whole app to be open-source.
+- PDF → DOCX isn't offered. Word can do it, but first shows a "Word will now convert your PDF"
+  prompt that an invisible Word can't answer. Silencing it means changing a Word option.
+- Markdown/HTML/TXT → PDF needs the WebView2 runtime. It's part of Windows 11 and most up-to-date
+  Windows 10 PCs; without it those buttons don't appear.
 
 ## How it's put together
 
@@ -130,5 +211,10 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\GestureSpike\log.txt`.
 | `Engine/IConverter.cs` | The interface each backend implements. |
 | `Engine/ImageConverter.cs` | Images via Windows Imaging Component, including EXIF rotation. |
 | `Engine/FfmpegConverter.cs` | Runs `ffmpeg.exe` for video/audio; reads video sizes, grabs preview frames, parses progress. |
-| `Engine/OutputPaths.cs` | Picks a free output name next to the original and reserves it. |
+| `Engine/PdfConverter.cs` | PDF → images (Windows.Data.Pdf) and text (PdfPig); images/PDFs → one PDF (PdfPig). |
+| `Engine/WebPdfConverter.cs` | Markdown / HTML / TXT → PDF in a hidden WebView2; Markdown → HTML (Markdig). |
+| `Engine/OfficeConverter.cs` | Word / Excel / PowerPoint automation, with the hang and password safeguards. |
+| `Engine/Sta.cs` | Runs work on the single-threaded apartment thread WPF imaging and Office need. |
+| `Engine/OutputPaths.cs` | Picks a free output name (or folder) next to the original and reserves it. |
+| `Theme.cs` | Light / dark / same-as-Windows, for the wheel and the windows. |
 | `App.xaml.cs` | Tray icon and menu, gesture checks, routing wheel buttons to dialogs and the queue, notifications. |

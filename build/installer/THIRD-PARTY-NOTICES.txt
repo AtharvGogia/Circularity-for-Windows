@@ -1,0 +1,37 @@
+Circularity
+Copyright (c) 2026 Atharv Gogia
+
+Circularity includes the following third-party software. Their licence texts are in the
+"licenses" folder next to this file.
+
+FFmpeg (ffmpeg.exe)
+  Licence: GNU Lesser General Public License, version 2.1 or later (licenses\FFmpeg-LGPL-2.1.txt)
+  https://ffmpeg.org
+  Built as an LGPL configuration with no GPL components. Its source code is available from
+  https://ffmpeg.org/releases/ (the exact version is shown by "ffmpeg -version"), and the build
+  script used is part of Circularity's source code (build/ffmpeg/build-ffmpeg.sh).
+  ffmpeg.exe is a separate program that Circularity runs; you may replace it with your own build.
+
+  FFmpeg as built here includes:
+    libvpx (VP8/VP9)          BSD licence             https://chromium.googlesource.com/webm/libvpx
+    LAME (MP3 encoding)       LGPL 2.0 or later        https://lame.sourceforge.io
+    Opus                      BSD licence             https://opus-codec.org
+    libogg, libvorbis         BSD licence             https://xiph.org
+    dav1d (AV1 decoding)      BSD 2-Clause licence    https://code.videolan.org/videolan/dav1d
+    zlib                      zlib licence            https://zlib.net
+
+.NET runtime
+  Licence: MIT (licenses\dotnet-LICENSE.txt; notices in licenses\dotnet-ThirdPartyNotices.txt)
+  https://dotnet.microsoft.com
+
+PdfPig
+  Licence: Apache License 2.0 (licenses\PdfPig-Apache-2.0.txt)
+  https://github.com/UglyToad/PdfPig
+
+Markdig
+  Licence: BSD 2-Clause (licenses\Markdig-BSD-2-Clause.txt)
+  https://github.com/xoofx/markdig
+
+Microsoft Edge WebView2 SDK
+  Licence: see licenses\WebView2-LICENSE.txt and licenses\WebView2-NOTICE.txt
+  https://developer.microsoft.com/microsoft-edge/webview2
