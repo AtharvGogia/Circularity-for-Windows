@@ -7,6 +7,7 @@ using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 
 namespace Circularity;
@@ -61,6 +62,11 @@ internal sealed class WheelView : Canvas
     private static readonly Duration Outro = TimeSpan.FromMilliseconds(110);
     private static readonly Color CancelHot = Color.FromArgb(0x70, 0xE5, 0x48, 0x4D);
 
+    /// <summary>How soft the shadow under the wheel is, and how far it drops.</summary>
+    private const double ShadowBlur = 22, ShadowDepth = 4;
+
+    private readonly Image _discShadow = new() { IsHitTestVisible = false };
+    private readonly Image _arcShadow = new() { IsHitTestVisible = false, Visibility = Visibility.Collapsed };
     private readonly Canvas _backdrop = new();
     private readonly Ellipse _disc;
     private readonly Path _arc;
@@ -119,13 +125,13 @@ internal sealed class WheelView : Canvas
         // with no gap: moving out of "More" into the arc never leaves the wheel.
         _arc = new Path { Visibility = Visibility.Collapsed };
 
-        // One shadow for the disc and the arc together, so the arc reads as part of the same surface
-        // (and the disc's shadow doesn't darken the arc as it would from a separate layer).
-        _backdrop.Effect = new DropShadowEffect { BlurRadius = 22, ShadowDepth = 4, Direction = 270, Color = Colors.Black };
         _backdrop.Children.Add(_arc);
         _backdrop.Children.Add(_arcOutline);
         _backdrop.Children.Add(_disc);
 
+        // The shadows are pictures drawn once (see Shadow), under the disc and the arc.
+        Children.Add(_discShadow);
+        Children.Add(_arcShadow);
         Children.Add(_backdrop);
         Children.Add(_layer);
         Children.Add(_arcLayer);
@@ -201,7 +207,8 @@ internal sealed class WheelView : Canvas
         _disc.Stroke = new SolidColorBrush(_palette.DiscStroke);
         SetLeft(_disc, Mid - Radius);
         SetTop(_disc, Mid - Radius);
-        ((DropShadowEffect)_backdrop.Effect).Opacity = _palette.ShadowOpacity;
+        _discShadow.Width = _discShadow.Height = _arcShadow.Width = _arcShadow.Height = Extent;
+        _discShadow.Source = Shadow(new EllipseGeometry(new Point(Mid, Mid), Radius, Radius));
 
         // The very same gradient, laid out around the wheel's centre, so the arc is the disc's surface
         // carried on past its edge: same colour, same transparency.
@@ -222,7 +229,31 @@ internal sealed class WheelView : Canvas
         Rebuild();
     }
 
-    private UIElement[] ArcElements => new UIElement[] { _arc, _arcOutline, _arcLayer };
+    private UIElement[] ArcElements => new UIElement[] { _arcShadow, _arc, _arcOutline, _arcLayer };
+
+    /// <summary>
+    /// The soft shadow under a shape, drawn once into a picture. A live blur effect would be redrawn
+    /// on every frame of every animation, which (with the wheel drawn by the CPU, see App) costs more
+    /// than everything else on the wheel put together. The shadow's strength follows the surface's
+    /// transparency, as a real shadow through tinted glass would.
+    /// </summary>
+    private BitmapSource Shadow(Geometry shape)
+    {
+        int size = (int)Math.Ceiling(Extent);
+        double strength = _settings.Opacity * _palette.ShadowOpacity;
+        var path = new Path
+        {
+            Data = new GeometryGroup { Children = { shape }, Transform = new TranslateTransform(0, ShadowDepth) },
+            Fill = new SolidColorBrush(Color.FromArgb((byte)Math.Round(strength * 255), 0, 0, 0)),
+            Effect = new BlurEffect { Radius = ShadowBlur, KernelType = KernelType.Gaussian, RenderingBias = RenderingBias.Quality },
+        };
+        path.Measure(new Size(size, size));
+        path.Arrange(new Rect(0, 0, size, size));
+        var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(path);
+        bitmap.Freeze();
+        return bitmap;
+    }
 
     public void SetActions(WheelAction[] actions, string centerLabel)
     {
@@ -561,6 +592,7 @@ internal sealed class WheelView : Canvas
         if (count == 0)
         {
             _arc.Data = _arcOutline.Data = Geometry.Empty;
+            _arcShadow.Source = null;
             return;
         }
 
@@ -593,6 +625,8 @@ internal sealed class WheelView : Canvas
         double side = Gap / 2 - Inset;
         double outerCorner = Math.Min(corner + Inset, (ArcRim - Radius) / 2);
         _arc.Data = Band(arcFrom, to, Radius - 1, ArcRim, side, 0, outerCorner);
+        // Drawn from the part outside the disc only, so the two shadows meet without doubling up.
+        _arcShadow.Source = Shadow(Band(arcFrom, to, Radius, ArcRim, side, 0, outerCorner));
         // The outline follows the backdrop's sides and outer edge; along the disc, the disc's own edge does.
         _arcOutline.Data = Band(arcFrom, to, Radius, ArcRim, side, 0, outerCorner, closed: false);
     }
@@ -680,8 +714,7 @@ internal sealed class WheelView : Canvas
         SetTop(content, at.Y - content.DesiredSize.Height / 2);
 
         var text = new SolidColorBrush(_palette.Text);
-        var group = new Canvas { RenderTransform = new TranslateTransform(), Children = { body, glow, content } };
-        TextElement.SetForeground(group, text);
+        var group = new Canvas { RenderTransform = new TranslateTransform(), Children = { body, glow, content } };        TextElement.SetForeground(group, text);
         host.Children.Add(group);
         _buttons.Add(new WheelButton(target, group, body, glow, text, midAngle, at));
     }
