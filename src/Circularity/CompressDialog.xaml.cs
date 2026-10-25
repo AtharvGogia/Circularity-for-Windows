@@ -19,9 +19,15 @@ internal partial class CompressDialog : Window
     /// <summary>The chosen compression, once the dialog has returned true.</summary>
     public CompressSpec? Result { get; private set; }
 
+    /// <summary>The name for a wheel button that repeats this compression, if the user asked for one.</summary>
+    public string? PresetName { get; private set; }
+
+    private readonly PresetNamer _namer;
+
     public CompressDialog(string[] files)
     {
         InitializeComponent();
+        _namer = new PresetNamer(SaveAsPreset, PresetNamePanel, PresetNameBox, Update);
 
         long totalBytes = files.Sum(f => new FileInfo(f).Length);
         Heading.Text = files.Length == 1 ? $"Compress {Path.GetFileName(files[0])}" : $"Compress {files.Length} images";
@@ -61,13 +67,16 @@ internal partial class CompressDialog : Window
     private void Update()
     {
         // Called by events that can fire while InitializeComponent is still building the controls.
-        if (OkButton == null || QualityText == null || SizePanel == null)
+        if (OkButton == null || QualityText == null || SizePanel == null || _namer == null)
             return;
 
         QualityPanel.Visibility = QualityMode.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         SizePanel.Visibility = SizeMode.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         QualityText.Text = $"{QualitySlider.Value:0}%";
-        OkButton.IsEnabled = BuildSpec() != null;
+        var spec = BuildSpec();
+        OkButton.IsEnabled = spec != null && _namer.IsValid;
+        if (spec != null)
+            _namer.Suggest(spec.MaxBytes is { } bytes ? $"Under {FileSizes.Format(bytes)}" : $"{spec.Quality}% quality");
     }
 
     private CompressSpec? BuildSpec()
@@ -84,6 +93,7 @@ internal partial class CompressDialog : Window
     private void Ok_Click(object sender, RoutedEventArgs e)
     {
         Result = BuildSpec();
+        PresetName = _namer.Name;
         if (Result != null)
             DialogResult = true;
     }

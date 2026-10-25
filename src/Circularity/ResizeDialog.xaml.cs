@@ -15,6 +15,11 @@ internal partial class ResizeDialog : Window
     /// <summary>The chosen resize, once the dialog has returned true.</summary>
     public ResizeSpec? Result { get; private set; }
 
+    /// <summary>The name for a wheel button that repeats this resize, if the user asked for one.</summary>
+    public string? PresetName { get; private set; }
+
+    private readonly PresetNamer _namer;
+
     /// <param name="sourceSize">Upright size of the file, when exactly one file is being resized.</param>
     public ResizeDialog(string[] files, (int Width, int Height)? sourceSize)
     {
@@ -30,6 +35,7 @@ internal partial class ResizeDialog : Window
         WidthBox.Text = w.ToString(CultureInfo.InvariantCulture);
         HeightBox.Text = h.ToString(CultureInfo.InvariantCulture);
 
+        _namer = new PresetNamer(SaveAsPreset, PresetNamePanel, PresetNameBox, Update);
         WidthBox.TextChanged += (_, _) => SyncAspect(fromWidth: true);
         HeightBox.TextChanged += (_, _) => SyncAspect(fromWidth: false);
         KeepAspect.Click += (_, _) => Update();
@@ -61,11 +67,13 @@ internal partial class ResizeDialog : Window
     private void Update()
     {
         // Called by events that can fire while InitializeComponent is still building the controls.
-        if (OkButton == null || ResultText == null)
+        if (OkButton == null || ResultText == null || _namer == null)
             return;
 
         var spec = BuildSpec();
-        OkButton.IsEnabled = spec != null;
+        OkButton.IsEnabled = spec != null && _namer.IsValid;
+        if (spec != null)
+            _namer.Suggest($"{spec.Width}×{spec.Height}");
         if (spec == null)
         {
             ResultText.Text = "Enter a width and height between 1 and 20000.";
@@ -94,6 +102,7 @@ internal partial class ResizeDialog : Window
     private void Ok_Click(object sender, RoutedEventArgs e)
     {
         Result = BuildSpec();
+        PresetName = _namer.Name;
         if (Result != null)
             DialogResult = true;
     }

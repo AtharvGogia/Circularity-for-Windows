@@ -293,6 +293,11 @@ public partial class App : Application
             _queue!.Enqueue(new[] { (files[0], (Operation)new CombineIntoPdf(files)) });
             return;
         }
+        if (action.Preset is { } preset)
+        {
+            _queue!.Enqueue(files, preset.Operation);
+            return;
+        }
 
         if (_dialogOpen)
         {
@@ -347,14 +352,33 @@ public partial class App : Application
 
         var dialog = Dialog(new ResizeDialog(files, size));
         if (dialog.ShowDialog() == true && dialog.Result != null)
+        {
             _queue!.Enqueue(files, new ResizeTo(dialog.Result));
+            if (dialog.PresetName is { } name)
+                AddPreset(new Preset(Preset.NewId(), name, Resize: dialog.Result));
+        }
     }
 
     private void Compress(string[] files)
     {
         var dialog = Dialog(new CompressDialog(files));
         if (dialog.ShowDialog() == true && dialog.Result != null)
+        {
             _queue!.Enqueue(files, new CompressTo(dialog.Result));
+            if (dialog.PresetName is { } name)
+                AddPreset(new Preset(Preset.NewId(), name, Compress: dialog.Result));
+        }
+    }
+
+    /// <summary>Saves a new wheel button; it goes at the end of the order, so usually behind More until moved.</summary>
+    private void AddPreset(Preset preset)
+    {
+        var settings = _settings.Clone();
+        settings.Presets.Add(preset);
+        settings.Save();
+        ApplySettings(settings);
+        _settingsWindow?.Reload(settings);
+        Log.Write($"Added a wheel button '{preset.Name}' ({preset.Operation.Describe()}).");
     }
 
     private async Task CropAsync(string[] files)
@@ -422,7 +446,7 @@ public partial class App : Application
             return;
         }
 
-        _settingsWindow = Dialog(new SettingsWindow(_settings, _queue!.CanHandle));
+        _settingsWindow = Dialog(new SettingsWindow(_settings, _queue!.CanHandle, _ffmpeg));
         _settingsWindow.SettingsChanged += settings =>
         {
             ApplySettings(settings);

@@ -95,6 +95,77 @@ internal static class InteractionTest
             Check("Esc cancels", chosen == null && !wheel.IsOpen, chosen?.Label ?? "nothing chosen");
             Pump(() => !wheel.IsVisible, 1500);
             Check("wheel fades out and closes", !wheel.IsVisible);
+
+            // 4. "More": an image offers more buttons than the ring holds, so the extras move into
+            // the arc behind a More button at the bottom.
+            chosen = null;
+            wheel.ShowForFiles(new[] { picture }, cx, cy);
+            Pump(() => false, 300);
+            var view = (WheelView)wheel.Content;
+            Check("more buttons than the ring holds", view.Actions.Count > WheelView.MaxRingButtons, $"{view.Actions.Count} buttons");
+            Check("the ring is capped at six", view.RingOrder.Count == WheelView.MaxRingButtons, $"{view.RingOrder.Count} on the ring");
+            Check("the bottom button is More", view.RingOrder.Count > 3 && view.RingOrder[3] == WheelView.MoreIndex);
+
+            // Buttons that open a dialog sit left of "More", on the ring or in the arc.
+            double middle = view.Width / 2;
+            var misplaced = view.Actions
+                .Select((action, i) => (action, i))
+                .Where(x => x.action.OpensDialog && !(view.PointFor(x.i)?.X < middle - 1))
+                .Select(x => x.action.Label)
+                .ToList();
+            Check("dialog buttons are all left of More", misplaced.Count == 0, string.Join(", ", misplaced));
+
+            // Arrow onto More (it is the fourth of the six): that shows the arc.
+            for (int i = 0; i < 4; i++)
+                Press(wheel, Key.Right);
+            Pump(() => view.IsExpanded, 1000);
+            int inArc = view.ArcOrder.Count;
+            Check("More opens the arc", view.IsExpanded && view.HotIndex == WheelView.MoreIndex
+                && inArc == view.Actions.Count - (WheelView.MaxRingButtons - 1), $"hot {view.HotIndex}, {inArc} in the arc");
+
+            // Down goes into the arc, onto the button under More; Left moves left along it.
+            Press(wheel, Key.Down);
+            int under = view.HotIndex;
+            Press(wheel, Key.Left);
+            bool movedLeft = view.PointFor(view.HotIndex)?.X < view.PointFor(under)?.X;
+            Check("arrow keys move along the arc", view.ArcOrder.Contains(under) && movedLeft,
+                $"{Label(view, under)} then {Label(view, view.HotIndex)}");
+
+            Press(wheel, Key.Escape);
+            Pump(() => !view.IsExpanded, 1000);
+            Check("Esc steps back out of the arc", !view.IsExpanded && wheel.IsOpen && view.HotIndex == WheelView.MoreIndex,
+                $"hot {view.HotIndex}");
+
+            // Enter on More goes back in, onto the button under it, which Enter then takes.
+            Press(wheel, Key.Enter);
+            Pump(() => view.IsExpanded, 1000);
+            string expected = Label(view, view.HotIndex);
+            Press(wheel, Key.Enter);
+            Pump(() => chosen != null, 1000);
+            Check("a button in the arc can be chosen", chosen?.Label == expected && view.ArcOrder.Contains(view.Actions.ToList().IndexOf(chosen!)) && !wheel.IsOpen,
+                chosen?.Label ?? "nothing chosen");
+            Pump(() => !wheel.IsVisible, 1500);
+
+            // 5. Near the bottom of the screen the arc wouldn't fit below, so More moves to the top and
+            // the arc opens upwards; Up then goes into it.
+            chosen = null;
+            var bottom = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
+            wheel.ShowForFiles(new[] { picture }, bottom.Left + bottom.Width / 2, bottom.Bottom - 20);
+            Pump(() => false, 300);
+            Check("near the bottom, More moves to the top", view.ArcAbove && view.RingOrder[0] == WheelView.MoreIndex,
+                $"arc above: {view.ArcAbove}, top button: {view.RingOrder[0]}");
+            Press(wheel, Key.Right); // the first ring button, which is now More
+            Press(wheel, Key.Up);
+            Check("Up goes into an arc above the wheel", view.IsExpanded && view.ArcOrder.Contains(view.HotIndex), $"hot {Label(view, view.HotIndex)}");
+            Press(wheel, Key.Escape);
+            Press(wheel, Key.Escape);
+            Pump(() => !wheel.IsVisible, 1500);
+
+            wheel.ShowForFiles(new[] { picture }, cx, cy);
+            Pump(() => false, 200);
+            Check("mid-screen, the arc opens below again", !view.ArcAbove);
+            Press(wheel, Key.Escape);
+            Pump(() => !wheel.IsVisible, 1500);
             wheel.Close();
 
             // 4. Reading the selection from a real Explorer window.
@@ -160,6 +231,9 @@ internal static class InteractionTest
             window.Quit();
         }
     }
+
+    private static string Label(WheelView view, int target) =>
+        target >= 0 && target < view.Actions.Count ? view.Actions[target].Label : target.ToString();
 
     private static void Press(Window window, Key key)
     {

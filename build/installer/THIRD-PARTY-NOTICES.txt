@@ -31,6 +31,26 @@ PdfPig
   Licence: Apache License 2.0 (licenses\PdfPig-Apache-2.0.txt)
   https://github.com/UglyToad/PdfPig
 
+PDFium (pdfium.dll), used to turn PDF pages into images
+  Licence: BSD 3-Clause and Apache License 2.0 (licenses\PDFium-pdfium.txt)
+  https://pdfium.googlesource.com/pdfium
+  Prebuilt by the pdfium-binaries project, MIT licence (licenses\PDFium-binaries-MIT.txt)
+  https://github.com/bblanchon/pdfium-binaries
+  Built without JavaScript (V8) or XFA forms. It includes the following, whose licences are
+  in licenses\PDFium-<name>.txt:
+    FreeType                  FreeType Licence (FTL)
+    HarfBuzz                  MIT ("Old MIT") licence
+    ICU                       Unicode licence
+    libjpeg-turbo             IJG licence and BSD 3-Clause
+    OpenJPEG                  BSD 2-Clause licence
+    libpng                    libpng licence
+    Little CMS (lcms2)        MIT licence
+    zlib                      zlib licence
+    Abseil                    Apache License 2.0
+    LLVM libc, dragonbox      Apache License 2.0 with LLVM exception (dragonbox also Boost)
+    fast_float, simdutf       MIT licence
+    Anti-Grain Geometry 2.3   AGG licence (permission to copy and use)
+
 Markdig
   Licence: BSD 2-Clause (licenses\Markdig-BSD-2-Clause.txt)
   https://github.com/xoofx/markdig

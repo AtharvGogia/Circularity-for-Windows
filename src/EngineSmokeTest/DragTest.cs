@@ -75,13 +75,30 @@ internal static class DragTest
                 failures++;
         }
 
-        // Button 0 is at the top of the ring. For a .png the first button is "JPG".
-        double ringRadius = settings.WheelSize * 0.33 * dpi;
-        var onButton = new Point(catcherCenter.X, catcherCenter.Y - ringRadius);
-        var offWheel = new Point(catcherCenter.X + settings.WheelSize * dpi, catcherCenter.Y);
-
-        foreach (var (name, target, expectDrop) in new[] { ("drop on top button", onButton, true), ("drag off the wheel", offWheel, false) })
+        // Where buttons sit, from a wheel laid out the same way, relative to its centre.
+        var layout = new WheelView();
+        layout.ApplySettings(settings);
+        layout.SetActions(Formats.ActionsFor(new[] { file }, (_, _) => true).Actions, "");
+        Point Screen(int target)
         {
+            var at = layout.PointFor(target)!.Value;
+            return new Point(catcherCenter.X + (at.X - layout.Extent / 2) * dpi, catcherCenter.Y + (at.Y - layout.Extent / 2) * dpi);
+        }
+        int lastInArc = layout.ArcOrder[^1];
+        string lastInArcLabel = layout.Actions[lastInArc].Label;
+
+        // Button 0 is at the top of the ring. For a .png the first button is "JPG".
+        var cases = new (string Name, Point[] Path, string? Expect)[]
+        {
+            ("drop on top button", new[] { Screen(0) }, "JPG"),
+            ("drag off the wheel", new[] { new Point(catcherCenter.X + settings.WheelSize * dpi, catcherCenter.Y) }, null),
+            // Rest on More so the arc opens, then out to the far (left) end of the arc.
+            ("drop in the More arc", new[] { Screen(WheelView.MoreIndex), Screen(lastInArc) }, lastInArcLabel),
+        };
+
+        foreach (var (name, path, expect) in cases)
+        {
+            bool expectDrop = expect != null;
             chosen = null;
             caught = false;
 
@@ -98,8 +115,13 @@ internal static class DragTest
                 Thread.Sleep(200);
                 Glide(sourceCenter, catcherCenter, 25);   // into the wheel's centre
                 Thread.Sleep(250);
-                Glide(catcherCenter, target, 12);
-                Thread.Sleep(300);
+                var from = catcherCenter;
+                foreach (var stop in path)
+                {
+                    Glide(from, stop, 12);
+                    Thread.Sleep(300);
+                    from = stop;
+                }
                 Mouse(MOUSEEVENTF_LEFTUP);
             });
             input.Start();
@@ -112,7 +134,7 @@ internal static class DragTest
             Console.WriteLine($"      (drag finished with effect {result})");
 
             if (expectDrop)
-                Check(name, chosen?.Label == "JPG" && !caught, $"chosen: {chosen?.Label ?? "nothing"}, fell through to catcher: {caught}");
+                Check(name, chosen?.Label == expect && !caught, $"chosen: {chosen?.Label ?? "nothing"}, fell through to catcher: {caught}");
             else
                 Check(name, chosen == null && !wheel.IsVisible, $"chosen: {chosen?.Label ?? "nothing"}, wheel visible: {wheel.IsVisible}");
         }

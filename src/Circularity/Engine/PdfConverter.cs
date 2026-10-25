@@ -9,17 +9,15 @@ using System.Windows.Media.Imaging;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 using UglyToad.PdfPig.Writer;
-using Windows.Data.Pdf;
-using Windows.Storage;
-using Windows.Storage.Streams;
 using PdfPigDocument = UglyToad.PdfPig.PdfDocument;
-using WinRTBitmapEncoder = Windows.Graphics.Imaging.BitmapEncoder;
 
 namespace Circularity.Engine;
 
 /// <summary>
 /// PDF work that needs nothing installed:
-///  - PDF → PNG/JPG, one image per page, with Windows' own PDF renderer (Windows.Data.Pdf)
+///  - PDF → PNG/JPG, one image per page, with PDFium (see <see cref="PdfiumDocument"/>). Windows'
+///    own renderer (Windows.Data.Pdf) was dropped: it draws with the GPU, and on some graphics
+///    drivers it crashed the app as it closed.
 ///  - PDF → TXT with PdfPig
 ///  - image → PDF, and several images/PDFs combined into one PDF, with PdfPig's PDF builder
 /// (PdfPig is Apache-2.0. PDFsharp was avoided: from 6.5 on it is AGPL.)
@@ -28,6 +26,9 @@ internal sealed class PdfConverter : IConverter
 {
     /// <summary>Pages are rendered at twice their natural size (about 192 dpi), which keeps text sharp.</summary>
     private const double RenderScale = 2;
+
+    /// <summary>Huge pages (posters, maps) are scaled down to this many pixels on their longest side.</summary>
+    private const int MaxRenderSide = 10000;
 
     public bool CanHandle(string inputPath, Operation operation)
     {
@@ -75,50 +76,43 @@ internal sealed class PdfConverter : IConverter
     /// One page becomes "report.png" in the reserved spot. Several pages go into a folder
     /// "report (pages)" as "page 01.png", "page 02.png"..., replacing the placeholder file.
     /// </summary>
-    private static async Task<string> RenderPagesAsync(string inputPath, string target, string outputPath, IProgress<double> progress, CancellationToken cancellationToken)
-    {
-        var file = await StorageFile.GetFileFromPathAsync(inputPath);
-        var pdf = await PdfDocument.LoadFromFileAsync(file);
-        uint count = pdf.PageCount;
-
-        string? folder = null;
-        if (count > 1)
+    private static Task<string> RenderPagesAsync(string inputPath, string target, string outputPath, IProgress<double> progress, CancellationToken cancellationToken) =>
+        Task.Run(() =>
         {
-            File.Delete(outputPath);
-            folder = OutputPaths.ReserveFolder(inputPath, "pages");
-        }
+            using var pdf = PdfiumDocument.Open(inputPath);
+            int count = pdf.PageCount;
 
-        try
-        {
-            int digits = Math.Max(2, count.ToString().Length);
-            for (uint i = 0; i < count; i++)
+            string? folder = null;
+            if (count > 1)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                string pagePath = folder == null ? outputPath : Path.Combine(folder, $"page {(i + 1).ToString().PadLeft(digits, '0')}.{target}");
-
-                using var page = pdf.GetPage(i);
-                var options = new PdfPageRenderOptions
-                {
-                    DestinationWidth = (uint)Math.Round(page.Size.Width * RenderScale),
-                    BitmapEncoderId = target == "jpg" ? WinRTBitmapEncoder.JpegEncoderId : WinRTBitmapEncoder.PngEncoderId,
-                };
-                using var rendered = new InMemoryRandomAccessStream();
-                await page.RenderToStreamAsync(rendered, options);
-                rendered.Seek(0);
-                using (var output = File.Create(pagePath))
-                    await rendered.AsStreamForRead().CopyToAsync(output, cancellationToken);
-
-                progress.Report((i + 1) / (double)count);
+                File.Delete(outputPath);
+                folder = OutputPaths.ReserveFolder(inputPath, "pages");
             }
-        }
-        catch
-        {
-            if (folder != null)
-                TryDeleteFolder(folder);
-            throw;
-        }
-        return folder ?? outputPath;
-    }
+
+            try
+            {
+                int digits = Math.Max(2, count.ToString().Length);
+                for (int i = 0; i < count; i++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    string pagePath = folder == null ? outputPath : Path.Combine(folder, $"page {(i + 1).ToString().PadLeft(digits, '0')}.{target}");
+
+                    BitmapEncoder encoder = target == "jpg" ? new JpegBitmapEncoder { QualityLevel = 92 } : new PngBitmapEncoder();
+                    encoder.Frames.Add(BitmapFrame.Create(pdf.RenderPage(i, RenderScale, MaxRenderSide)));
+                    using (var output = File.Create(pagePath))
+                        encoder.Save(output);
+
+                    progress.Report((i + 1) / (double)count);
+                }
+            }
+            catch
+            {
+                if (folder != null)
+                    TryDeleteFolder(folder);
+                throw;
+            }
+            return folder ?? outputPath;
+        }, cancellationToken);
 
     private static string ExtractText(string inputPath)
     {

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -21,20 +23,28 @@ internal partial class SettingsWindow : Window
         "#FF8A1E", "#F43F5E", "#EC4899", "#8B5CF6", "#3B82F6", "#06B6D4", "#14B8A6", "#22C55E", "#EAB308", "#94A3B8",
     };
 
+    private static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
+
     private readonly WheelView _preview = new();
     private readonly Func<string, Engine.Operation, bool> _canHandle;
+    private readonly Engine.FfmpegConverter? _ffmpeg;
     private Settings _settings;
     private bool _loading;
+    private string _sample = "photo.jpg";
+    private FileKind _kind = FileKind.Image;
+    private List<DiagnosticItem>? _diagnostics;
 
     /// <param name="canHandle">What this PC can convert, so the preview shows the same buttons as the real wheel.</param>
-    public SettingsWindow(Settings current, Func<string, Engine.Operation, bool>? canHandle = null)
+    /// <param name="ffmpeg">The FFmpeg in use, for the About tab.</param>
+    public SettingsWindow(Settings current, Func<string, Engine.Operation, bool>? canHandle = null, Engine.FfmpegConverter? ffmpeg = null)
     {
         InitializeComponent();
         _settings = current.Clone();
         _canHandle = canHandle ?? ((_, _) => true);
+        _ffmpeg = ffmpeg;
 
         _preview.ApplySettings(_settings);
-        ShowPreviewFor("photo.jpg");
+        ShowPreviewFor("photo.jpg", FileKind.Image);
         _preview.SetHot(0);
 
         // The preview behaves like the real wheel: hovering lights buttons, clicking one flashes it,
@@ -49,14 +59,28 @@ internal partial class SettingsWindow : Window
             else
                 _preview.Flash(index);
         };
-        PreviewImage.Checked += (_, _) => ShowPreviewFor("photo.jpg");
-        PreviewVideo.Checked += (_, _) => ShowPreviewFor("clip.mp4");
-        PreviewAudio.Checked += (_, _) => ShowPreviewFor("song.mp3");
-        PreviewDocument.Checked += (_, _) => ShowPreviewFor("report.docx");
+        PreviewImage.Checked += (_, _) => ShowPreviewFor("photo.jpg", FileKind.Image);
+        PreviewVideo.Checked += (_, _) => ShowPreviewFor("clip.mp4", FileKind.Video);
+        PreviewAudio.Checked += (_, _) => ShowPreviewFor("song.mp3", FileKind.Audio);
+        PreviewDocument.Checked += (_, _) => ShowPreviewFor("report.docx", FileKind.Document);
         PreviewHost.Content = _preview;
 
-        var version = typeof(SettingsWindow).Assembly.GetName().Version;
-        VersionText.Text = $"Circularity {version?.Major}.{version?.Minor}";
+        VersionText.Text = $"Circularity {Diagnostics.AppVersion()}";
+
+        // Looking for FFmpeg, Office and the rest takes a moment, so only when the tab is first opened.
+        Tabs.SelectionChanged += async (_, e) =>
+        {
+            if (e.Source == Tabs && Tabs.SelectedItem == AboutTab && _diagnostics == null)
+            {
+                var items = await Diagnostics.CollectAsync(_ffmpeg);
+                // Back on this window's thread, whatever thread the await resumed on.
+                Dispatcher.Invoke(() =>
+                {
+                    _diagnostics = items;
+                    ShowDiagnostics(items);
+                });
+            }
+        };
 
         SizeSlider.ValueChanged += (_, _) => OnControlChanged();
         OpacitySlider.ValueChanged += (_, _) => OnControlChanged();
@@ -92,6 +116,7 @@ internal partial class SettingsWindow : Window
         _loading = false;
         BuildSwatches();
         Refresh();
+        RefreshButtons();
     }
 
     private void OnControlChanged()
@@ -121,14 +146,243 @@ internal partial class SettingsWindow : Window
         Theme.ApplyTo(this, _settings.Theme);
     }
 
-    /// <summary>Shows the buttons the real wheel would offer for a file like this one.</summary>
-    private void ShowPreviewFor(string sampleFile)
+    /// <summary>Shows the buttons the real wheel would offer for a file like this one, and lists them for rearranging.</summary>
+    private void ShowPreviewFor(string sampleFile, FileKind kind)
     {
         // Called by RadioButton.Checked while InitializeComponent is still running.
         if (_preview == null || _canHandle == null)
             return;
-        var (label, actions) = Formats.ActionsFor(new[] { sampleFile }, _canHandle);
+        _sample = sampleFile;
+        _kind = kind;
+        RefreshButtons();
+    }
+
+    /// <summary>Puts in settings that changed elsewhere (a button saved from the Resize window, say).</summary>
+    public void Reload(Settings settings)
+    {
+        _settings = settings.Clone();
+        LoadControls();
+    }
+
+    // --- Buttons tab ---
+
+    private void RefreshButtons()
+    {
+        var (label, actions) = Formats.ActionsFor(new[] { _sample }, _canHandle, _settings);
         _preview.SetActions(actions, label);
+        BuildButtonList(actions);
+    }
+
+    /// <summary>
+    /// Every button the wheel can show for the previewed kind of file, in order, each with where it
+    /// ends up for the sample file, arrows to move it, a box to show or hide it, and (for saved
+    /// buttons) a way to delete it.
+    /// </summary>
+    private void BuildButtonList(WheelAction[] shown)
+    {
+        ButtonsHeading.Text = _kind switch
+        {
+            FileKind.Image => "Buttons for images",
+            FileKind.Video => "Buttons for videos",
+            FileKind.Audio => "Buttons for audio",
+            _ => "Buttons for documents",
+        };
+        ResetOrderButton.IsEnabled = _settings.ButtonLayouts.ContainsKey(_kind.ToString());
+
+        var (ring, arc) = WheelView.Layout(shown);
+        var onRing = ring.Where(i => i >= 0).Select(i => shown[i].Id).ToHashSet();
+        var inArc = arc.Select(i => shown[i].Id).ToHashSet();
+        var hidden = Layout(create: false)?.Hidden ?? new List<string>();
+        string ext = Formats.NormalizedExtension(_sample);
+
+        var all = Formats.AllButtonsFor(_kind, _settings);
+        ButtonList.Children.Clear();
+        for (int i = 0; i < all.Count; i++)
+        {
+            var action = all[i];
+            string id = action.Id;
+            string where = hidden.Contains(id) ? "Hidden"
+                : onRing.Contains(id) ? "On the wheel"
+                : inArc.Contains(id) ? "Behind More"
+                : action.Kind == WheelActionKind.Combine ? "When several files are dropped"
+                : action.Kind == WheelActionKind.Convert && !Formats.Offers(_sample, action.Target!) ? $"Not for .{ext} files"
+                : "Not available on this PC";
+            ButtonList.Children.Add(ButtonRow(action, where, i, all.Count, !hidden.Contains(id)));
+        }
+    }
+
+    private FrameworkElement ButtonRow(WheelAction action, string where, int index, int count, bool visible)
+    {
+        var row = new DockPanel { Margin = new Thickness(0, 0, 4, 6), LastChildFill = true };
+
+        var show = new CheckBox { IsChecked = visible, ToolTip = "Show on the wheel", MinWidth = 0, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        show.Click += (_, _) => SetHidden(action.Id, show.IsChecked != true);
+        DockPanel.SetDock(show, Dock.Right);
+        row.Children.Add(show);
+
+        if (action.Preset != null)
+        {
+            var delete = IconButton("", $"Delete “{action.Label}”");
+            delete.Click += (_, _) => DeletePreset(action.Preset);
+            DockPanel.SetDock(delete, Dock.Right);
+            row.Children.Add(delete);
+        }
+
+        var down = IconButton("", "Move down");
+        down.IsEnabled = index < count - 1;
+        down.Click += (_, _) => Move(action.Id, +1);
+        DockPanel.SetDock(down, Dock.Right);
+        row.Children.Add(down);
+
+        var up = IconButton("", "Move up");
+        up.IsEnabled = index > 0;
+        up.Click += (_, _) => Move(action.Id, -1);
+        DockPanel.SetDock(up, Dock.Right);
+        row.Children.Add(up);
+
+        var icon = new TextBlock { Text = action.Glyph, FontFamily = IconFont, FontSize = 16, Width = 28, VerticalAlignment = VerticalAlignment.Center };
+        DockPanel.SetDock(icon, Dock.Left);
+        row.Children.Add(icon);
+
+        row.Children.Add(new StackPanel
+        {
+            VerticalAlignment = VerticalAlignment.Center,
+            Opacity = visible ? 1 : 0.55,
+            Children =
+            {
+                new TextBlock { Text = action.Preset != null ? $"{action.Label}  ·  saved {action.Preset.Operation.Describe().ToLowerInvariant()}" : action.Label },
+                new TextBlock { Text = where, FontSize = 11.5, Opacity = 0.65 },
+            },
+        });
+        return row;
+    }
+
+    private static Button IconButton(string glyph, string tooltip) => new()
+    {
+        Content = new TextBlock { Text = glyph, FontFamily = IconFont, FontSize = 12 },
+        ToolTip = tooltip,
+        Width = 32,
+        Height = 30,
+        Padding = new Thickness(0),
+        Margin = new Thickness(4, 0, 0, 0),
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    /// <summary>The layout for the previewed kind of file, made when asked to.</summary>
+    private ButtonLayout? Layout(bool create)
+    {
+        string key = _kind.ToString();
+        if (!_settings.ButtonLayouts.TryGetValue(key, out var layout) && create)
+            _settings.ButtonLayouts[key] = layout = new ButtonLayout();
+        return layout;
+    }
+
+    private void Move(string id, int by)
+    {
+        var order = Formats.AllButtonsFor(_kind, _settings).Select(a => a.Id).ToList();
+        int at = order.IndexOf(id), to = at + by;
+        if (at < 0 || to < 0 || to >= order.Count)
+            return;
+        (order[at], order[to]) = (order[to], order[at]);
+        Layout(create: true)!.Order = order;
+        ButtonsChanged();
+    }
+
+    private void SetHidden(string id, bool hide)
+    {
+        var layout = Layout(create: true)!;
+        layout.Hidden.Remove(id);
+        if (hide)
+            layout.Hidden.Add(id);
+        ButtonsChanged();
+    }
+
+    private void DeletePreset(Preset preset)
+    {
+        _settings.Presets.RemoveAll(p => p.Id == preset.Id);
+        string id = "preset:" + preset.Id;
+        foreach (var layout in _settings.ButtonLayouts.Values)
+        {
+            layout.Order.Remove(id);
+            layout.Hidden.Remove(id);
+        }
+        ButtonsChanged();
+    }
+
+    private void ResetOrder_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.ButtonLayouts.Remove(_kind.ToString());
+        ButtonsChanged();
+    }
+
+    private void ButtonsChanged()
+    {
+        RefreshButtons();
+        SettingsChanged?.Invoke(_settings.Clone());
+    }
+
+    // --- About tab ---
+
+    private void ShowDiagnostics(List<DiagnosticItem> items)
+    {
+        DiagnosticsList.Children.Clear();
+        foreach (var item in items)
+        {
+            var row = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
+            var mark = new TextBlock
+            {
+                Text = item.Ok ? "" : "", // check mark / warning
+                FontFamily = IconFont,
+                FontSize = 14,
+                Width = 26,
+                Foreground = new SolidColorBrush(item.Ok ? Color.FromRgb(0x2E, 0xA0, 0x43) : Color.FromRgb(0xD9, 0x7A, 0x06)),
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 2, 0, 0),
+            };
+            DockPanel.SetDock(mark, Dock.Left);
+            row.Children.Add(mark);
+            row.Children.Add(new StackPanel
+            {
+                Children =
+                {
+                    new TextBlock { Text = item.Name, FontWeight = FontWeights.SemiBold },
+                    new TextBlock { Text = item.Detail, TextWrapping = TextWrapping.Wrap, Opacity = 0.75 },
+                },
+            });
+            DiagnosticsList.Children.Add(row);
+        }
+    }
+
+    private async void CopyDiagnostics_Click(object sender, RoutedEventArgs e)
+    {
+        CopyDiagnosticsButton.IsEnabled = false;
+        try
+        {
+            var items = _diagnostics ?? await Diagnostics.CollectAsync(_ffmpeg);
+            string report = await System.Threading.Tasks.Task.Run(() => Diagnostics.Report(items));
+            Dispatcher.Invoke(() =>
+            {
+                _diagnostics = items;
+                ShowDiagnostics(items);
+                Clipboard.SetText(report);
+                CopiedText.Visibility = Visibility.Visible;
+            });
+        }
+        catch (System.Runtime.InteropServices.COMException ex)
+        {
+            // Another app can briefly hold the clipboard.
+            MessageBox.Show(this, $"Couldn't copy to the clipboard: {ex.Message}", "Circularity");
+        }
+        finally
+        {
+            CopyDiagnosticsButton.IsEnabled = true;
+        }
+    }
+
+    private void OpenLog_Click(object sender, RoutedEventArgs e)
+    {
+        if (System.IO.File.Exists(Log.FilePath))
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Log.FilePath) { UseShellExecute = true });
     }
 
     private void OnStartupClicked()
@@ -203,8 +457,8 @@ internal partial class SettingsWindow : Window
 
     private void Reset_Click(object sender, RoutedEventArgs e)
     {
-        // Not a preference, so resetting shouldn't bring the welcome back.
-        _settings = new Settings { WelcomeShown = _settings.WelcomeShown };
+        // Not preferences, so resetting shouldn't bring the welcome back or delete the user's buttons.
+        _settings = new Settings { WelcomeShown = _settings.WelcomeShown, Presets = _settings.Presets };
         LoadControls();
         SettingsChanged?.Invoke(_settings.Clone());
     }

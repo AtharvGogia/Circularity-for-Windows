@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Windows.Media;
+using Circularity.Engine;
 
 namespace Circularity;
 
@@ -39,6 +42,15 @@ internal sealed class Settings
     /// <summary>Set once the first-run welcome has been shown.</summary>
     public bool WelcomeShown { get; set; }
 
+    /// <summary>Saved resize and compress settings, offered on the wheel as one-click buttons.</summary>
+    public List<Preset> Presets { get; set; } = new();
+
+    /// <summary>
+    /// The user's button order, and buttons left off the wheel, per kind of file ("Image", "Video"...).
+    /// Kinds that aren't listed use the built-in order.
+    /// </summary>
+    public Dictionary<string, ButtonLayout> ButtonLayouts { get; set; } = new();
+
     public static readonly string FilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Circularity", "settings.json");
 
@@ -59,7 +71,14 @@ internal sealed class Settings
         }
     }
 
-    public Settings Clone() => (Settings)MemberwiseClone();
+    /// <summary>A copy that shares nothing with this one, lists included.</summary>
+    public Settings Clone()
+    {
+        var copy = (Settings)MemberwiseClone();
+        copy.Presets = new List<Preset>(Presets);
+        copy.ButtonLayouts = ButtonLayouts.ToDictionary(pair => pair.Key, pair => pair.Value.Clone());
+        return copy;
+    }
 
     public static Settings Load()
     {
@@ -94,6 +113,27 @@ internal sealed class Settings
         WheelSize = Math.Clamp(WheelSize, MinWheelSize, MaxWheelSize);
         Opacity = Math.Clamp(Opacity, 0.4, 1);
         AccentColor = string.IsNullOrWhiteSpace(AccentColor) ? DefaultAccent : AccentColor;
+        Presets = (Presets ?? new()).Where(p => p is { Id.Length: > 0, Name.Length: > 0 } && (p.Resize != null) != (p.Compress != null)).ToList();
+        ButtonLayouts ??= new();
         return this;
     }
+}
+
+/// <summary>A saved resize or compress (exactly one of the two), shown on the wheel under its name.</summary>
+internal sealed record Preset(string Id, string Name, ResizeSpec? Resize = null, CompressSpec? Compress = null)
+{
+    public const int MaxNameLength = 14;
+
+    public Operation Operation => Resize != null ? new ResizeTo(Resize) : new CompressTo(Compress!);
+
+    public static string NewId() => Guid.NewGuid().ToString("N")[..8];
+}
+
+/// <summary>For one kind of file: button IDs (see <see cref="WheelAction.Id"/>) in the user's order, and the hidden ones.</summary>
+internal sealed class ButtonLayout
+{
+    public List<string> Order { get; set; } = new();
+    public List<string> Hidden { get; set; } = new();
+
+    public ButtonLayout Clone() => new() { Order = new List<string>(Order), Hidden = new List<string>(Hidden) };
 }

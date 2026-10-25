@@ -88,49 +88,56 @@ internal static class ReadmeMedia
     private static double DragScene(Stage s)
     {
         double t = s.Time;
-        var wheelAt = new Point(380, 220);
+        var wheelAt = new Point(380, 215);
+        const double DropAt = 4.7;
         if (s.Once("setup"))
         {
             s.Desktop(new[] { "holiday.jpg", "notes.md", "clip.mp4" });
             s.WheelFor("holiday.jpg");
         }
 
-        // Move to the file, press, and start dragging it.
-        if (t < 0.7)
-            s.Cursor(Lerp(new Point(560, 340), TileHome + new Vector(30, 30), Ease(t / 0.7)));
-        else if (t < 1.6)
+        // Pick the file up, carry it to the wheel, sweep the ring, open "More", and land on GIF.
+        var path = new (double At, Point P)[]
         {
-            var p = Lerp(TileHome + new Vector(30, 30), wheelAt, Ease((t - 0.7) / 0.9));
-            s.Cursor(p);
-            s.DragGhost(p - new Vector(30, 30), visible: true);
-        }
-        else if (s.Once("rightclick"))
+            (0.0, new Point(560, 350)),
+            (0.7, TileHome + new Vector(30, 30)),
+            (1.7, wheelAt),
+            (2.5, s.ButtonPoint(wheelAt, 1)),                           // sweep across the ring
+            (3.3, s.TargetPoint(wheelAt, WheelView.MoreIndex)),         // pause on More: the arc opens
+            (DropAt, s.TargetPoint(wheelAt, s.IndexOfTarget("gif"))),   // out into the arc, onto GIF
+        };
+        var cursor = Along(path, t);
+        s.Cursor(cursor);
+        if (t >= 0.7 && t < DropAt + 0.1)
+            s.DragGhost(cursor - new Vector(30, 30), visible: true);
+
+        if (t >= 1.7 && s.Once("rightclick"))
         {
             s.Ripple(wheelAt, "Right-click");
             s.ShowWheel(wheelAt);
         }
+        if (t >= 1.8 && t < DropAt)
+            s.HoverAt(cursor);
 
-        // Sweep around the ring, then settle on WEBP.
-        if (t >= 1.9 && t < 3.5)
-        {
-            double angle = -40 + (t - 1.9) / 1.6 * 160; // degrees clockwise from 12 o'clock
-            var p = wheelAt + new Vector(Math.Sin(angle * Math.PI / 180), -Math.Cos(angle * Math.PI / 180)) * 95;
-            s.Cursor(p);
-            s.DragGhost(p - new Vector(30, 30), visible: true);
-            s.HoverAt(p);
-        }
-        if (t >= 3.5 && s.Once("pick"))
-        {
-            s.HoverTarget("webp");
-        }
-        if (t >= 3.9 && s.Once("drop"))
+        if (t >= DropAt && s.Once("drop"))
         {
             s.DragGhost(default, visible: false);
             s.HideWheel();
         }
-        if (t >= 4.2 && s.Once("toast"))
-            s.Toast("Done", "holiday.webp\nClick to show.");
-        return 6.0;
+        if (t >= DropAt + 0.3 && s.Once("toast"))
+            s.Toast("Done", "holiday.gif\nClick to show.");
+        return DropAt + 2.1;
+    }
+
+    /// <summary>Walks a cursor through timed waypoints, easing between them.</summary>
+    private static Point Along((double At, Point P)[] path, double t)
+    {
+        for (int i = 1; i < path.Length; i++)
+        {
+            if (t <= path[i].At)
+                return Lerp(path[i - 1].P, path[i].P, Ease((t - path[i - 1].At) / (path[i].At - path[i - 1].At)));
+        }
+        return path[^1].P;
     }
 
     private static double KeyboardScene(Stage s)
@@ -309,16 +316,33 @@ internal static class ReadmeMedia
 
         public void HideWheel() => _wheel.PlayOutro(() => _wheel.Visibility = Visibility.Hidden);
 
+        /// <summary>Where a button sits on screen, given where the wheel is centred.</summary>
+        public Point TargetPoint(Point wheelAt, int target)
+        {
+            var middle = new Point(_wheel.Extent / 2, _wheel.Extent / 2);
+            return wheelAt + ((_wheel.PointFor(target) ?? middle) - middle);
+        }
+
+        /// <summary>Where the n-th showing button sits on screen.</summary>
+        public Point ButtonPoint(Point wheelAt, int index)
+        {
+            var order = _wheel.IsExpanded ? _wheel.ArcOrder : _wheel.RingOrder;
+            return order.Count == 0 ? wheelAt : TargetPoint(wheelAt, order[index % order.Count]);
+        }
+
+        public int IndexOfTarget(string target) => _wheel.IndexOfTarget(target);
+
         public void HoverAt(Point p) =>
             _wheel.SetHot(_wheel.HitTest(new Point(p.X - Canvas.GetLeft(_wheel), p.Y - Canvas.GetTop(_wheel))));
 
-        public void HoverIndex(int index) => _wheel.SetHot(index);
-
-        public void HoverTarget(string target)
+        /// <summary>Lights the n-th button that is actually showing (the ring, or the opened arc).</summary>
+        public void HoverIndex(int index)
         {
-            int index = _wheel.Actions.ToList().FindIndex(a => a.Target == target);
-            _wheel.SetHot(index);
+            var order = _wheel.IsExpanded ? _wheel.ArcOrder : _wheel.RingOrder;
+            if (order.Count > 0)
+                _wheel.SetHot(order[index % order.Count]);
         }
+
 
         public void Restyle(string accent, AppTheme theme)
         {

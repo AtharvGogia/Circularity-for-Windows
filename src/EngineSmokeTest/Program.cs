@@ -287,6 +287,27 @@ internal static class Program
         var single = await Convert(txtPdf.OutputPath!, "jpg");
         Check("pdf (1 page) -> jpg file", single.State == JobState.Succeeded && File.Exists(single.OutputPath) && single.OutputPath!.EndsWith(".jpg"), Name(single));
 
+        // The rendered page really has the text on it (dark pixels on the white page), not a blank sheet.
+        if (pngs.Length > 0)
+        {
+            double ink = InkFraction(pngs.OrderBy(p => p).First());
+            Check("rendered page has text on it", ink > 0.001 && ink < 0.5, $"{ink:P2} dark pixels");
+        }
+
+        // PDFium is given UTF-8 paths, so names outside plain ASCII must work.
+        string unicodeDir = Path.Combine(dir, "Документы 文档");
+        Directory.CreateDirectory(unicodeDir);
+        string unicodePdf = Path.Combine(unicodeDir, "résumé.pdf");
+        File.Copy(txtPdf.OutputPath!, unicodePdf);
+        var unicodeJpg = await Convert(unicodePdf, "jpg");
+        Check("pdf -> jpg with a non-English path", unicodeJpg.State == JobState.Succeeded && File.Exists(unicodeJpg.OutputPath), Name(unicodeJpg));
+
+        string broken = Path.Combine(dir, "broken.pdf");
+        File.WriteAllText(broken, "%PDF-1.7 this is not really a PDF");
+        var brokenPng = await Convert(broken, "png");
+        Check("damaged pdf fails with a readable message", brokenPng.State == JobState.Failed && brokenPng.Error?.Contains("damaged") == true,
+            $"{brokenPng.State}: {brokenPng.Error}");
+
         var pdfText = await Convert(mdPdf.OutputPath!, "txt");
         Check("pdf -> txt", pdfText.State == JobState.Succeeded && File.ReadAllText(pdfText.OutputPath!).Contains(Marker), Name(pdfText));
 
@@ -329,6 +350,81 @@ internal static class Program
         {
             Console.WriteLine("skip Excel checks (Excel not installed)");
         }
+
+        // What the wheel offers for documents, using the same converters as the app.
+        string Offer(params string[] names)
+        {
+            var (label, actions) = Formats.ActionsFor(names, queue.CanHandle);
+            return $"{label}: {string.Join(" ", actions.Select(a => a.Label))}";
+        }
+        if (Type.GetTypeFromProgID("Word.Application") != null)
+        {
+            string docx = Offer("a.docx");
+            Check("wheel offers Word buttons for a .docx", docx.Contains("PDF") && docx.Contains("TXT"), docx);
+            string pptx = Offer("a.pptx");
+            Check("wheel offers PDF for a .pptx", pptx.Contains("PDF"), pptx);
+        }
+        string mixed = Offer("a.pdf", "b.xlsx");
+        Check("documents with nothing in common don't blame Office", mixed.StartsWith("No format in common"), mixed);
+
+        WheelButtonChecks();
+    }
+
+    /// <summary>The user's button order, hidden buttons and saved presets, as the wheel sees them.</summary>
+    private static void WheelButtonChecks()
+    {
+        static string[] Labels(WheelAction[] actions) => actions.Select(a => a.Label).ToArray();
+        bool Anything(string _, Operation __) => true;
+
+        var size = new Preset("p1", "Web 1600", Resize: new ResizeSpec(ResizeKind.Fit, 1600, 1600));
+        var small = new Preset("p2", "Under 500 KB", Compress: new CompressSpec(MaxBytes: 500 * 1024));
+        var settings = new Settings { Presets = { size, small } };
+
+        var photo = Formats.ActionsFor(new[] { "a.jpg" }, Anything, settings).Actions;
+        Check("presets appear for images", Labels(photo).Contains("Web 1600") && Labels(photo).Contains("Under 500 KB"), string.Join(" ", Labels(photo)));
+        var clip = Formats.ActionsFor(new[] { "a.mp4" }, Anything, settings).Actions;
+        Check("only resize presets appear for videos", Labels(clip).Contains("Web 1600") && !Labels(clip).Contains("Under 500 KB"), string.Join(" ", Labels(clip)));
+
+        // Move GIF and the resize preset to the front, hide WEBP.
+        settings.ButtonLayouts["Image"] = new ButtonLayout { Order = { "gif", "preset:p1" }, Hidden = { "webp" } };
+        photo = Formats.ActionsFor(new[] { "a.jpg" }, Anything, settings).Actions;
+        Check("user order comes first", Labels(photo).Take(2).SequenceEqual(new[] { "GIF", "Web 1600" }), string.Join(" ", Labels(photo)));
+        Check("hidden buttons are left off", !Labels(photo).Contains("WEBP"), string.Join(" ", Labels(photo)));
+        string first = Labels(Formats.ActionsFor(new[] { "a.mp4" }, Anything, settings).Actions)[0];
+        Check("other kinds keep the built-in order", first == "WEBM", first);
+
+        // Even moved to the very front, a dialog button never ends up right of More.
+        settings.ButtonLayouts["Image"] = new ButtonLayout { Order = { "crop", "compress", "resize" } };
+        photo = Formats.ActionsFor(new[] { "a.jpg" }, Anything, settings).Actions;
+        var (ring, arc) = WheelView.Layout(photo);
+        bool onLeft = ring.Select((target, slot) => (target, slot))
+            .Where(x => x.target >= 0 && photo[x.target].OpensDialog).All(x => x.slot is 4 or 5);
+        int firstDialogInArc = arc.ToList().FindIndex(i => photo[i].OpensDialog);
+        bool arcLeft = firstDialogInArc < 0 || arc.Skip(firstDialogInArc).All(i => photo[i].OpensDialog) && firstDialogInArc >= arc.Length / 2;
+        Check("dialog buttons stay left of More whatever the order", onLeft && arcLeft,
+            $"ring: {string.Join(" ", ring.Select(i => i >= 0 ? photo[i].Label : "More"))}; arc: {string.Join(" ", arc.Select(i => photo[i].Label))}");
+
+        var all = Formats.AllButtonsFor(FileKind.Image, new Settings());
+        Check("settings list every image button", all.Count(a => a.Kind == WheelActionKind.Convert) == 7 && all.Any(a => a.Kind == WheelActionKind.Combine),
+            string.Join(" ", all.Select(a => a.Label)));
+
+        // Settings survive a save and load, presets and layouts included.
+        string json = System.Text.Json.JsonSerializer.Serialize(settings);
+        var back = System.Text.Json.JsonSerializer.Deserialize<Settings>(json)!;
+        Check("presets and button order are saved", back.Presets.SequenceEqual(settings.Presets) && back.ButtonLayouts["Image"].Order.SequenceEqual(settings.ButtonLayouts["Image"].Order),
+            $"{back.Presets.Count} presets");
+    }
+
+    /// <summary>Share of an image's pixels that are dark (darker than mid-grey).</summary>
+    private static double InkFraction(string path)
+    {
+        var image = new System.Windows.Media.Imaging.FormatConvertedBitmap(
+            System.Windows.Media.Imaging.BitmapFrame.Create(new Uri(path), System.Windows.Media.Imaging.BitmapCreateOptions.None,
+                System.Windows.Media.Imaging.BitmapCacheOption.OnLoad),
+            System.Windows.Media.PixelFormats.Gray8, null, 0);
+        var pixels = new byte[image.PixelWidth * image.PixelHeight];
+        image.CopyPixels(pixels, image.PixelWidth, 0);
+        return pixels.Count(p => p < 128) / (double)pixels.Length;
     }
 
     private static int PdfPages(string path)

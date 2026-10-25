@@ -3,7 +3,7 @@
 A file converter for Windows that lives at your cursor: drag a file, tap right-click (or Shift)
 mid-drag, and drop it on a button in the wheel that pops up around it.
 
-![Dragging a photo, tapping right-click, and dropping it on WebP](docs/media/drag.gif)
+![Dragging a photo, tapping right-click, opening More, and dropping it on GIF](docs/media/drag.gif)
 
 Everything happens on your PC: nothing is uploaded, and the original file is never changed.
 
@@ -37,6 +37,16 @@ A tray app that:
    real drop target: keep dragging onto a button and release. Dropping in the middle cancels;
    dragging off the wheel dismisses it, and the drag carries on as normal.
 
+   The ring holds **at most six buttons**, so each stays big enough to aim at without looking. When a
+   file has more to offer, the bottom one becomes **More**: resting on it fans the rest out into an
+   arc just outside the wheel, which you drop onto the same way. Everyday formats sit at the top and
+   on the right; buttons that open a dialog first (Resize, Compress, Crop) always sit to the left of
+   More, on the ring or at the left end of the arc. Near the bottom of the screen, where the arc
+   wouldn't fit, More moves to the top and the arc opens upwards instead.
+
+   While you drag, the label under the file says what letting go will do ("Convert to PNG", or
+   "Cancel" over the middle), for drags that Windows draws, such as those from File Explorer.
+
    **Without dragging**, the same wheel opens at the cursor in click mode: hover and click a button,
    or use the arrow keys and Enter; Esc, the centre or clicking elsewhere cancels. Three ways in:
 
@@ -65,7 +75,7 @@ A tray app that:
      shown as a frame from about one second in. Several files are cropped one after another.
    - **Documents**, with nothing extra to install:
      - **PDF** → PNG / JPG (one image per page; several pages go into a `name (pages)` folder) using
-       Windows' own PDF renderer, and → TXT using PdfPig
+       PDFium (the PDF engine in Chrome), and → TXT using PdfPig
      - **Markdown** → PDF or HTML, **HTML** → PDF, **TXT** → PDF, laid out by Edge (WebView2), on
        A4 or US Letter depending on your region
    - **Documents through Microsoft Office**, when it's installed (otherwise these buttons don't appear):
@@ -77,6 +87,9 @@ A tray app that:
      open. A password-protected file fails straight away instead of asking for a password, and an
      Office job that hangs is stopped after 3 minutes.
    - **Combine** (two or more images and/or PDFs): one PDF with every page, in the order dropped.
+   - **Your own buttons**: tick "Also add this as a button on the wheel" in the Resize or Compress
+     window, and that exact resize or compression becomes a one-click button (named, say,
+     "1920×1080" or "Under 500 KB"). These run straight away, without the window.
 
 Results are saved as new copies next to the original: `photo.png`, `photo (resized).jpg`,
 `photo (cropped).jpg`, `photo (compressed).jpg`, `scan (combined).pdf`, with ` (1)`, ` (2)`... if the name is taken. The original is never touched:
@@ -96,14 +109,18 @@ The first time Circularity starts, a short welcome explains the gestures.
 Double-click the tray icon (or right-click → **Settings…**) for the following. The wheel preview in
 Settings is live: hover and click it, and switch it between image, video, audio and document files.
 
-
-- **theme**: same as Windows (follows it live), light or dark, for the wheel and every window
-- wheel **size** (200–360 px) and **background opacity**
-- **accent colour**: presets or any custom colour; the tray icon follows it
-- which **gestures** are on (right-click, Shift, the Ctrl+Alt+C shortcut)
-- **notifications** when conversions finish and when Circularity starts (problems always show)
-- **start at sign-in**: the same Windows sign-in entry the installer's checkbox creates, so the two
+- **Wheel**: **theme** (same as Windows, following it live, or light or dark, for the wheel and
+  every window), **size** (200–360 px), **background opacity**, and **accent colour** (presets or
+  any custom colour; the tray icon follows it)
+- **Buttons**: for each kind of file, move buttons up and down (higher ones get a place on the ring
+  first, the rest go behind More), hide the ones you never use, and delete your own buttons. Each
+  one says where it ends up. Dialog buttons stay left of More whatever the order.
+- **General**: which **gestures** are on (right-click, Shift, the Ctrl+Alt+C shortcut),
+  **notifications** when conversions finish and when Circularity starts (problems always show), and
+  **start at sign-in**: the same Windows sign-in entry the installer's checkbox creates, so the two
   always agree; it also notices (and, when ticked, undoes) "Disabled" in Task Manager's Startup apps
+- **About**: what Circularity found on this PC (FFmpeg, Office, WebView2, PDFium, Windows) and
+  **Copy diagnostics**, which puts that list and the end of the log on the clipboard for a bug report
 
 Changes apply live, with a preview, and are saved to `%APPDATA%\Circularity\settings.json`.
 
@@ -119,8 +136,8 @@ It produces, in `artifacts\`:
 
 | Output | What it is | Size |
 | --- | --- | --- |
-| `artifacts\CircularitySetup-0.3.0.exe` | The installer to hand out | ~64 MB |
-| `artifacts\Circularity\Circularity.exe` | The app itself, in a self-contained folder that also runs without installing (e.g. from a USB stick) | ~214 MB folder |
+| `artifacts\CircularitySetup-0.3.1.exe` | The installer to hand out | ~67 MB |
+| `artifacts\Circularity\Circularity.exe` | The app itself, in a self-contained folder that also runs without installing (e.g. from a USB stick) | ~222 MB folder |
 
 The installer:
 
@@ -235,7 +252,8 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 - Licensing: the FFmpeg bundled in the installer is LGPL (see above), so Circularity can stay
   closed-source. The Gyan "full" FFmpeg suggested for development is GPL; don't ship that one.
 - The other libraries are fine for a closed-source app: PdfPig (Apache-2.0), Markdig (BSD-2-Clause),
-  WebView2 (Microsoft's redistributable licence). PDFsharp was deliberately not used: from 6.5 it's
+  PDFium (BSD-3-Clause / Apache-2.0, with permissive licences for what it bundles), WebView2
+  (Microsoft's redistributable licence). PDFsharp was deliberately not used: from 6.5 it's
   AGPL, which would force the whole app to be open-source.
 - PDF → DOCX isn't offered. Word can do it, but first shows a "Word will now convert your PDF"
   prompt that an invisible Word can't answer. Silencing it means changing a Word option.
@@ -249,8 +267,11 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 | `GestureHook.cs` | Mouse + keyboard hooks on their own thread; detects right-click or Shift mid-drag and swallows it. |
 | `WheelWindow.xaml(.cs)` | Transparent, never-focused, topmost window; the drop target; dismisses when dragged off. |
 | `WheelView.cs` | Draws the wheel (also used for the live preview in Settings). |
-| `Formats.cs` | Which buttons (formats and tools) to offer for the dropped files, and their icons. |
-| `SettingsWindow.xaml(.cs)` / `Settings.cs` | Settings UI with live preview / the saved settings. |
+| `Formats.cs` | Which buttons (formats, tools, your own) to offer for the dropped files, in your order, and their icons. |
+| `SettingsWindow.xaml(.cs)` / `Settings.cs` | Settings UI with live preview / the saved settings, presets and button order. |
+| `PresetNamer.cs` | The "also add this as a button on the wheel" option in the Resize and Compress windows. |
+| `DropFeedback.cs` | The label under a dragged file ("Convert to PNG", "Cancel") while it's over the wheel. |
+| `Diagnostics.cs` | What was found on this PC, for the About tab and "Copy diagnostics". |
 | `ResizeDialog.xaml(.cs)` | Resize options. |
 | `CompressDialog.xaml(.cs)` | Compression options (quality or target size). |
 | `CropWindow.xaml(.cs)` | Crop editor. |
@@ -260,7 +281,7 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 | `Engine/IConverter.cs` | The interface each backend implements. |
 | `Engine/ImageConverter.cs` | Images via Windows Imaging Component, including EXIF rotation. |
 | `Engine/FfmpegConverter.cs` | Runs `ffmpeg.exe` for video/audio; reads video sizes, grabs preview frames, parses progress. |
-| `Engine/PdfConverter.cs` | PDF → images (Windows.Data.Pdf) and text (PdfPig); images/PDFs → one PDF (PdfPig). |
+| `Engine/PdfConverter.cs` | PDF → images (PDFium, `Engine/Pdfium.cs`) and text (PdfPig); images/PDFs → one PDF (PdfPig). |
 | `Engine/WebPdfConverter.cs` | Markdown / HTML / TXT → PDF in a hidden WebView2; Markdown → HTML (Markdig). |
 | `Engine/OfficeConverter.cs` | Word / Excel / PowerPoint automation, with the hang and password safeguards. |
 | `Engine/Sta.cs` | Runs work on the single-threaded apartment thread WPF imaging and Office need. |
@@ -278,7 +299,7 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 The in-app updater looks at this repository's latest GitHub release, so a release must:
 
 1. be tagged with the version, e.g. `v0.3.0` (matching `<Version>` in `src/Circularity/Circularity.csproj`), and
-2. have the installer from `build\build.ps1`, `CircularitySetup-0.3.0.exe`, attached as an asset.
+2. have the installer from `build\build.ps1`, `CircularitySetup-0.3.1.exe`, attached as an asset.
 
 Whatever is written in the release's description is shown in the update window as "what's new".
 The repository has to be public for the updater to see releases.
