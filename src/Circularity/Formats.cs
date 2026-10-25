@@ -8,7 +8,7 @@ namespace Circularity;
 
 internal enum FileKind { Image, Video, Audio, Document, Mixed, Unknown }
 
-internal enum WheelActionKind { Convert, Resize, Crop, Compress, Combine, Preset, More }
+internal enum WheelActionKind { Convert, Resize, Crop, Compress, Trim, Combine, Preset, More }
 
 /// <summary>One button on the wheel. <paramref name="Preset"/> is set for a saved resize or compress.</summary>
 internal sealed record WheelAction(WheelActionKind Kind, string Label, string Glyph, string? Target = null, Preset? Preset = null)
@@ -16,7 +16,7 @@ internal sealed record WheelAction(WheelActionKind Kind, string Label, string Gl
     public bool IsTool => Kind is not (WheelActionKind.Convert or WheelActionKind.More);
 
     /// <summary>Asks for something (a size, a crop) before it runs, rather than running straight away.</summary>
-    public bool OpensDialog => Kind is WheelActionKind.Resize or WheelActionKind.Crop or WheelActionKind.Compress;
+    public bool OpensDialog => Kind is WheelActionKind.Resize or WheelActionKind.Crop or WheelActionKind.Compress or WheelActionKind.Trim;
 
     /// <summary>Stays the same across versions and files, for remembering the user's order: "png", "resize", "preset:1a2b3c4d".</summary>
     public string Id => Kind switch
@@ -43,6 +43,7 @@ internal static class Glyphs
     public const string Combine = "";
     public const string Cancel = "";
     public const string More = "";
+    public const string Trim = ""; // scissors
 }
 
 /// <summary>Which buttons the wheel offers for a set of dropped files.</summary>
@@ -78,25 +79,46 @@ internal static class Formats
     private static readonly WheelAction Resize = new(WheelActionKind.Resize, "Resize", Glyphs.Resize);
     private static readonly WheelAction Crop = new(WheelActionKind.Crop, "Crop", Glyphs.Crop);
     private static readonly WheelAction Compress = new(WheelActionKind.Compress, "Compress", Glyphs.Compress);
+    private static readonly WheelAction Trim = new(WheelActionKind.Trim, "Trim", Glyphs.Trim);
     private static readonly WheelAction Combine = new(WheelActionKind.Combine, "Combine", Glyphs.Combine);
 
+    // Which tools each kind of file can have; a tool is only offered when an installed converter can
+    // actually do it to every file (Compress is for PDFs, not every document).
     private static readonly Dictionary<FileKind, WheelAction[]> ToolsByKind = new()
     {
         [FileKind.Image] = new[] { Resize, Compress, Crop },
-        [FileKind.Video] = new[] { Resize, Crop },
+        [FileKind.Video] = new[] { Trim, Compress, Resize, Crop },
+        [FileKind.Audio] = new[] { Trim },
+        [FileKind.Document] = new[] { Compress },
+    };
+
+    /// <summary>
+    /// Stand-ins for asking a converter whether it can apply a tool at all; the real settings come
+    /// from the tool's window.
+    /// </summary>
+    private static Operation SampleOperation(WheelAction tool) => tool.Kind switch
+    {
+        WheelActionKind.Resize => new ResizeTo(new ResizeSpec(ResizeKind.Fit, 100, 100)),
+        WheelActionKind.Crop => new CropTo(new PixelRect(0, 0, 1, 1)),
+        WheelActionKind.Compress => new CompressTo(new CompressSpec(Quality: 60)),
+        _ => new TrimTo(TimeSpan.Zero, TimeSpan.FromSeconds(1), Exact: false),
     };
 
     private static readonly Dictionary<string, FileKind> KindByExtension = new(StringComparer.OrdinalIgnoreCase)
     {
         ["png"] = FileKind.Image, ["jpg"] = FileKind.Image, ["jpeg"] = FileKind.Image, ["jfif"] = FileKind.Image,
         ["bmp"] = FileKind.Image, ["gif"] = FileKind.Image, ["tif"] = FileKind.Image, ["tiff"] = FileKind.Image,
-        ["webp"] = FileKind.Image, ["heic"] = FileKind.Image, ["heif"] = FileKind.Image, ["ico"] = FileKind.Image,
+        ["webp"] = FileKind.Image, ["ico"] = FileKind.Image,
+        // iPhone and camera HEIF photos, and AVIF: read by Windows if it has the codec, else by FFmpeg.
+        ["heic"] = FileKind.Image, ["heif"] = FileKind.Image, ["hif"] = FileKind.Image, ["avif"] = FileKind.Image,
 
         ["mp4"] = FileKind.Video, ["mov"] = FileKind.Video, ["mkv"] = FileKind.Video, ["avi"] = FileKind.Video,
         ["webm"] = FileKind.Video, ["wmv"] = FileKind.Video, ["m4v"] = FileKind.Video,
 
         ["mp3"] = FileKind.Audio, ["wav"] = FileKind.Audio, ["flac"] = FileKind.Audio, ["ogg"] = FileKind.Audio,
         ["m4a"] = FileKind.Audio, ["aac"] = FileKind.Audio, ["wma"] = FileKind.Audio, ["opus"] = FileKind.Audio,
+        // Apple's own audio containers (Core Audio Format, AIFF); M4A above also covers Apple Lossless.
+        ["caf"] = FileKind.Audio, ["aif"] = FileKind.Audio, ["aiff"] = FileKind.Audio, ["aifc"] = FileKind.Audio,
 
         ["pdf"] = FileKind.Document, ["docx"] = FileKind.Document, ["doc"] = FileKind.Document,
         ["odt"] = FileKind.Document, ["rtf"] = FileKind.Document, ["txt"] = FileKind.Document,
@@ -113,6 +135,7 @@ internal static class Formats
         {
             "jpeg" or "jfif" => "jpg",
             "tif" => "tiff",
+            "aif" or "aifc" => "aiff",
             "markdown" => "md",
             "htm" => "html",
             _ => ext,
@@ -143,10 +166,14 @@ internal static class Formats
         var targets = common.Where(t => files.All(f => canHandle(f, new ConvertTo(t))));
         var actions = targets.Select(ConvertAction).ToList();
 
-        // Tools every file supports (resize and crop work on a mix of images and videos).
+        // Tools every file supports (resize and crop work on a mix of images and videos). Compress and
+        // Trim mean different things for different kinds, so a mix doesn't get them.
         var tools = kinds
             .Select(k => ToolsByKind.TryGetValue(k, out var t) ? t : Array.Empty<WheelAction>())
-            .Aggregate((a, b) => a.Intersect(b).ToArray());
+            .Aggregate((a, b) => a.Intersect(b).ToArray())
+            .Where(t => kinds.Count == 1 || t.Kind is not (WheelActionKind.Compress or WheelActionKind.Trim))
+            .Where(t => files.All(f => canHandle(f, SampleOperation(t))))
+            .ToArray();
         actions.AddRange(tools);
 
         if (files.Count > 1 && canHandle(files[0], new CombineIntoPdf(files)))
@@ -154,8 +181,8 @@ internal static class Formats
 
         if (settings != null)
         {
-            // A preset appears wherever its tool does.
-            actions.AddRange(PresetActions(settings, tools)
+            // A preset appears wherever its tool does (a compress preset, only for the kind it was made for).
+            actions.AddRange(PresetActions(settings, tools, kinds.Count == 1 ? kinds[0] : FileKind.Mixed)
                 .Where(a => files.All(f => canHandle(f, a.Preset!.Operation))));
             if (kinds.Count == 1 && settings.ButtonLayouts.TryGetValue(kinds[0].ToString(), out var layout))
                 actions = Arrange(actions, layout).Where(a => !layout.Hidden.Contains(a.Id)).ToList();
@@ -202,7 +229,7 @@ internal static class Formats
         var all = targets.Select(ConvertAction).Concat(tools).ToList();
         if (kind is FileKind.Image or FileKind.Document)
             all.Add(Combine);
-        all.AddRange(PresetActions(settings, tools));
+        all.AddRange(PresetActions(settings, tools, kind));
         return settings.ButtonLayouts.TryGetValue(kind.ToString(), out var layout) ? Arrange(all, layout) : all;
     }
 
@@ -218,15 +245,18 @@ internal static class Formats
         .Select(x => x.action)
         .ToList();
 
-    /// <summary>The presets whose tool (resize or compress) is among <paramref name="tools"/>.</summary>
-    private static IEnumerable<WheelAction> PresetActions(Settings settings, IEnumerable<WheelAction> tools)
+    /// <summary>
+    /// The presets whose tool is among <paramref name="tools"/>. A resize suits images and videos alike;
+    /// a compression is only offered for the kind of file it was saved from.
+    /// </summary>
+    private static IEnumerable<WheelAction> PresetActions(Settings settings, IEnumerable<WheelAction> tools, FileKind kind)
     {
         bool resize = tools.Contains(Resize), compress = tools.Contains(Compress);
         foreach (var preset in settings.Presets)
         {
             if (preset.Resize != null && resize)
                 yield return new WheelAction(WheelActionKind.Preset, preset.Name, Glyphs.Resize, Preset: preset);
-            else if (preset.Compress != null && compress)
+            else if (preset.Compress != null && compress && preset.CompressesKind == kind)
                 yield return new WheelAction(WheelActionKind.Preset, preset.Name, Glyphs.Compress, Preset: preset);
         }
     }

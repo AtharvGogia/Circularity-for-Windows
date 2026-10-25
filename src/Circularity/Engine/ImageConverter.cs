@@ -12,19 +12,28 @@ namespace Circularity.Engine;
 
 /// <summary>
 /// Image conversion, resizing, cropping and compression using the Windows Imaging Component (via WPF).
-/// Reads anything WIC has a codec for (HEIC needs the free Microsoft Store extension); writes PNG, JPG,
-/// BMP, GIF and TIFF itself, and WebP by handing a PNG to FFmpeg (libwebp) when it has that encoder.
+/// Reads anything WIC has a codec for, and anything else FFmpeg can read (HEIC on PCs without the HEVC
+/// extension, AVIF without the AV1 one); writes PNG, JPG, BMP, GIF and TIFF itself, and WebP by
+/// handing a PNG to FFmpeg (libwebp) when it has that encoder.
 /// </summary>
 internal sealed class ImageConverter : IConverter
 {
     private static readonly HashSet<string> Writable = new() { "png", "jpg", "bmp", "gif", "tiff" };
 
+    /// <summary>What decodes images Windows can't, for every caller of <see cref="LoadOriented"/>.</summary>
+    private static FfmpegConverter? _fallbackDecoder;
+
+    /// <summary>For tests: behave like a PC with no Windows codec for any image, so FFmpeg decodes everything.</summary>
+    internal static bool SkipWindowsDecoder { get; set; }
+
     private readonly FfmpegConverter? _ffmpeg;
 
-    /// <param name="ffmpeg">Used to write WebP; without it (or without libwebp), WebP isn't offered.</param>
+    /// <param name="ffmpeg">Writes WebP (when it has libwebp), and reads images Windows has no codec for.</param>
     public ImageConverter(FfmpegConverter? ffmpeg = null)
     {
         _ffmpeg = ffmpeg;
+        if (ffmpeg?.FfmpegPath != null)
+            _fallbackDecoder = ffmpeg;
     }
 
     private bool CanWriteWebp => _ffmpeg?.CanEncodeWebp == true;
@@ -101,8 +110,42 @@ internal sealed class ImageConverter : IConverter
         Save(image, format, outputPath);
     }
 
-    /// <summary>Decodes the first frame, rotated upright according to its EXIF orientation. Frozen, so any thread can use it.</summary>
+    /// <summary>
+    /// Decodes the first frame, rotated upright according to its EXIF orientation. Frozen, so any
+    /// thread can use it. When Windows has no codec for the file, FFmpeg decodes it instead.
+    /// </summary>
     public static BitmapSource LoadOriented(string path)
+    {
+        try
+        {
+            if (!SkipWindowsDecoder)
+                return LoadWithWindows(path);
+        }
+        catch (Exception ex) when (IsUnreadable(ex) && _fallbackDecoder != null)
+        {
+            Log.Write($"Windows couldn't decode {Path.GetFileName(path)} ({ex.Message.Trim()}); using FFmpeg.");
+        }
+        if (_fallbackDecoder == null)
+            return LoadWithWindows(path);
+
+        string png = Path.Combine(Path.GetTempPath(), $"Circularity-decoded-{Guid.NewGuid():N}.png");
+        try
+        {
+            _fallbackDecoder.DecodeImageToPng(path, png);
+            // FFmpeg has already turned it the right way up, and a PNG has no orientation tag to apply twice.
+            return LoadWithWindows(png);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException($"Couldn't read {Path.GetFileName(path)}. It may be damaged. ({ex.Message})", ex);
+        }
+        finally
+        {
+            File.Delete(png);
+        }
+    }
+
+    private static BitmapSource LoadWithWindows(string path)
     {
         using var input = File.OpenRead(path);
         var decoder = BitmapDecoder.Create(input, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
@@ -113,14 +156,30 @@ internal sealed class ImageConverter : IConverter
         return image;
     }
 
-    /// <summary>Upright pixel size, read from the file header without decoding the whole image.</summary>
+    /// <summary>What Windows throws for a file it has no codec for (or can't make sense of).</summary>
+    private static bool IsUnreadable(Exception ex) =>
+        ex is NotSupportedException or FileFormatException or System.Runtime.InteropServices.COMException or ArgumentException or OverflowException;
+
+    /// <summary>Upright pixel size, read from the file header without decoding the whole image when Windows can.</summary>
     public static (int Width, int Height) ReadSize(string path)
     {
-        using var input = File.OpenRead(path);
-        var decoder = BitmapDecoder.Create(input, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
-        var frame = decoder.Frames[0];
-        double angle = RotationFor(ReadOrientation(frame.Metadata as BitmapMetadata));
-        return angle is 90 or 270 ? (frame.PixelHeight, frame.PixelWidth) : (frame.PixelWidth, frame.PixelHeight);
+        try
+        {
+            if (!SkipWindowsDecoder)
+            {
+                using var input = File.OpenRead(path);
+                var decoder = BitmapDecoder.Create(input, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+                var frame = decoder.Frames[0];
+                double angle = RotationFor(ReadOrientation(frame.Metadata as BitmapMetadata));
+                return angle is 90 or 270 ? (frame.PixelHeight, frame.PixelWidth) : (frame.PixelWidth, frame.PixelHeight);
+            }
+        }
+        catch (Exception ex) when (IsUnreadable(ex) && _fallbackDecoder != null)
+        {
+            // Falls through to a full decode below.
+        }
+        var image = LoadOriented(path);
+        return (image.PixelWidth, image.PixelHeight);
     }
 
     private static BitmapSource Resize(BitmapSource image, (int Width, int Height) size)

@@ -1,0 +1,52 @@
+<Window x:Class="Circularity.VideoCompressDialog"
+        x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Compress video"
+        Width="480" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True"
+        ThemeMode="System">
+    <StackPanel Margin="24">
+        <TextBlock x:Name="Heading" FontSize="20" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+        <TextBlock x:Name="SubHeading" Opacity="0.7" Margin="0,4,0,20" TextWrapping="Wrap" />
+
+        <WrapPanel Margin="0,0,0,14">
+            <RadioButton x:Name="QualityMode" Content="Quality" GroupName="Mode" IsChecked="True" Margin="0,0,20,0" />
+            <RadioButton x:Name="SizeMode" Content="Target file size" GroupName="Mode" />
+        </WrapPanel>
+
+        <StackPanel x:Name="QualityPanel">
+            <RadioButton x:Name="HighQuality" Content="Higher quality" GroupName="Level" />
+            <RadioButton x:Name="Balanced" Content="Balanced" GroupName="Level" IsChecked="True" Margin="0,4,0,0" />
+            <RadioButton x:Name="Smallest" Content="Smaller file" GroupName="Level" Margin="0,4,0,0" />
+        </StackPanel>
+
+        <StackPanel x:Name="SizePanel" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal">
+                <TextBox x:Name="SizeBox" Width="100" Text="25" />
+                <TextBlock Text="MB" VerticalAlignment="Center" Margin="8,0,0,0" />
+            </StackPanel>
+            <WrapPanel x:Name="SizePresets" Margin="0,10,0,0" />
+            <TextBlock Opacity="0.7" TextWrapping="Wrap" Margin="0,8,0,0"
+                       Text="Keeps the best picture that fits. For very small sizes, the resolution is lowered too." />
+        </StackPanel>
+
+        <TextBlock Text="Resolution" Margin="0,18,0,4" />
+        <ComboBox x:Name="ResolutionBox" Width="220" HorizontalAlignment="Left" />
+
+        <TextBlock x:Name="EstimateText" Margin="0,16,0,0" Opacity="0.8" TextWrapping="Wrap" />
+
+        <CheckBox x:Name="SaveAsPreset" Content="Also add this as a button on the wheel" Margin="0,18,0,0" />
+        <DockPanel x:Name="PresetNamePanel" Margin="28,6,0,0" Visibility="Collapsed">
+            <TextBlock Text="Button name" VerticalAlignment="Center" Opacity="0.8" Margin="0,0,10,0" />
+            <TextBox x:Name="PresetNameBox" />
+        </DockPanel>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+            <Button Content="Cancel" IsCancel="True" MinWidth="96" Margin="0,0,8,0" />
+            <Button x:Name="OkButton" Content="Compress" IsDefault="True" MinWidth="96" Click="Ok_Click" />
+        </StackPanel>
+    </StackPanel>
+</Window>

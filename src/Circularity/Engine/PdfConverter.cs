@@ -20,6 +20,7 @@ namespace Circularity.Engine;
 ///    drivers it crashed the app as it closed.
 ///  - PDF → TXT with PdfPig
 ///  - image → PDF, and several images/PDFs combined into one PDF, with PdfPig's PDF builder
+///  - smaller PDFs, by re-saving their pictures at a lower resolution with PDFium
 /// (PdfPig is Apache-2.0. PDFsharp was avoided: from 6.5 on it is AGPL.)
 /// </summary>
 internal sealed class PdfConverter : IConverter
@@ -35,7 +36,7 @@ internal sealed class PdfConverter : IConverter
         string ext = Formats.NormalizedExtension(inputPath);
         return operation switch
         {
-            ConvertTo { Target: "png" or "jpg" or "txt" } => ext == "pdf",
+            ConvertTo { Target: "png" or "jpg" or "txt" } or CompressTo => ext == "pdf",
             ConvertTo { Target: "pdf" } => Formats.KindOf(inputPath) == FileKind.Image,
             CombineIntoPdf combine => combine.Files.All(f => Formats.NormalizedExtension(f) == "pdf" || Formats.KindOf(f) == FileKind.Image),
             _ => false,
@@ -63,6 +64,10 @@ internal sealed class PdfConverter : IConverter
 
             case CombineIntoPdf combine:
                 await Sta.Run(() => { BuildPdf(combine.Files, outputPath, progress); return 0; }, "PdfConverter");
+                break;
+
+            case CompressTo compress:
+                await Sta.Run(() => { Compress(inputPath, compress.Spec, outputPath, cancellationToken); return 0; }, "PdfConverter");
                 break;
 
             default:
@@ -113,6 +118,68 @@ internal sealed class PdfConverter : IConverter
             }
             return folder ?? outputPath;
         }, cancellationToken);
+
+    /// <summary>
+    /// The resolution and JPEG quality for each compression level: "light" keeps pictures sharp
+    /// enough to print, "strong" is fine for reading on screen.
+    /// </summary>
+    public static (int Dpi, int JpegQuality) CompressionLevel(int quality) =>
+        quality >= 75 ? (200, 85) : quality >= 55 ? (150, 75) : (100, 60);
+
+    private static void Compress(string inputPath, CompressSpec spec, string outputPath, CancellationToken cancellationToken)
+    {
+        var (dpi, jpegQuality) = CompressionLevel(spec.Quality ?? 60);
+        using (var pdf = PdfiumDocument.Open(inputPath))
+        {
+            if (pdf.ShrinkImages(dpi, jpegQuality, cancellationToken) == 0)
+                throw new InvalidOperationException("This PDF can't be made smaller: it has no large pictures to shrink.");
+            pdf.SaveAs(outputPath);
+        }
+        if (new FileInfo(outputPath).Length >= new FileInfo(inputPath).Length)
+            throw new InvalidOperationException("This PDF can't be made smaller: its pictures are already compact.");
+        CheckLooksTheSame(inputPath, outputPath, cancellationToken);
+    }
+
+    /// <summary>
+    /// Compares every page of the original and the compressed PDF, drawn small. Shrunk pictures only
+    /// change a little; anything more means a page didn't survive being rewritten (some unusual PDFs
+    /// don't), and then it's safer to hand back nothing than a damaged copy.
+    /// </summary>
+    private static void CheckLooksTheSame(string originalPath, string compressedPath, CancellationToken cancellationToken)
+    {
+        using var original = PdfiumDocument.Open(originalPath);
+        using var compressed = PdfiumDocument.Open(compressedPath);
+        if (original.PageCount != compressed.PageCount)
+            throw new InvalidOperationException("Compressing changed the number of pages, so the PDF was left as it was.");
+        for (int i = 0; i < original.PageCount; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (MeanDifference(original.RenderPage(i, 0.3, 600), compressed.RenderPage(i, 0.3, 600)) > 10)
+                throw new InvalidOperationException($"Compressing would have changed how page {i + 1} looks, so the PDF was left as it was.");
+        }
+    }
+
+    /// <summary>Average difference per colour channel between two pictures, 0 to 255 (255 if their sizes differ).</summary>
+    private static double MeanDifference(BitmapSource a, BitmapSource b)
+    {
+        if (a.PixelWidth != b.PixelWidth || a.PixelHeight != b.PixelHeight)
+            return 255;
+        byte[] Pixels(BitmapSource s)
+        {
+            var bgr = new FormatConvertedBitmap(s, PixelFormats.Bgr32, null, 0);
+            var bytes = new byte[bgr.PixelWidth * bgr.PixelHeight * 4];
+            bgr.CopyPixels(bytes, bgr.PixelWidth * 4, 0);
+            return bytes;
+        }
+        byte[] pa = Pixels(a), pb = Pixels(b);
+        long total = 0;
+        for (int i = 0; i < pa.Length; i++)
+        {
+            if (i % 4 != 3)
+                total += Math.Abs(pa[i] - pb[i]);
+        }
+        return total / (pa.Length * 0.75);
+    }
 
     private static string ExtractText(string inputPath)
     {

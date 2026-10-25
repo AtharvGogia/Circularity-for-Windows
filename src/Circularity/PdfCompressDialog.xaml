@@ -1,0 +1,48 @@
+<Window x:Class="Circularity.PdfCompressDialog"
+        x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Compress PDF"
+        Width="460" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True"
+        ThemeMode="System">
+    <StackPanel Margin="24">
+        <TextBlock x:Name="Heading" FontSize="20" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+        <TextBlock x:Name="SubHeading" Opacity="0.7" Margin="0,4,0,20" TextWrapping="Wrap" />
+
+        <RadioButton x:Name="Light" GroupName="Level">
+            <StackPanel>
+                <TextBlock Text="Light" />
+                <TextBlock Text="Pictures stay sharp enough to print (200 dpi)." Opacity="0.7" FontSize="12" />
+            </StackPanel>
+        </RadioButton>
+        <RadioButton x:Name="Balanced" GroupName="Level" IsChecked="True" Margin="0,8,0,0">
+            <StackPanel>
+                <TextBlock Text="Balanced" />
+                <TextBlock Text="Good on screen and fine for most printing (150 dpi)." Opacity="0.7" FontSize="12" />
+            </StackPanel>
+        </RadioButton>
+        <RadioButton x:Name="Strong" GroupName="Level" Margin="0,8,0,0">
+            <StackPanel>
+                <TextBlock Text="Strong" />
+                <TextBlock Text="Smallest file, for reading on screen (100 dpi)." Opacity="0.7" FontSize="12" />
+            </StackPanel>
+        </RadioButton>
+
+        <TextBlock Margin="0,16,0,0" Opacity="0.8" TextWrapping="Wrap"
+                   Text="Only the pictures inside are made smaller; text and drawings stay exactly as they are. A PDF that's mostly text won't shrink much." />
+
+        <CheckBox x:Name="SaveAsPreset" Content="Also add this as a button on the wheel" Margin="0,18,0,0" />
+        <DockPanel x:Name="PresetNamePanel" Margin="28,6,0,0" Visibility="Collapsed">
+            <TextBlock Text="Button name" VerticalAlignment="Center" Opacity="0.8" Margin="0,0,10,0" />
+            <TextBox x:Name="PresetNameBox" />
+        </DockPanel>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+            <Button Content="Cancel" IsCancel="True" MinWidth="96" Margin="0,0,8,0" />
+            <Button x:Name="OkButton" Content="Compress" IsDefault="True" MinWidth="96" Click="Ok_Click" />
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -307,7 +307,7 @@ public partial class App : Application
 
         if (_dialogOpen)
         {
-            Notify("Finish the open window first", "A resize, crop or compress window is already open.", Forms.ToolTipIcon.Info);
+            Notify("Finish the open window first", "A resize, crop, compress or trim window is already open.", Forms.ToolTipIcon.Info);
             return;
         }
 
@@ -322,8 +322,17 @@ public partial class App : Application
                 case WheelActionKind.Crop:
                     await CropAsync(files);
                     break;
+                case WheelActionKind.Compress when Formats.KindOf(files[0]) == FileKind.Video:
+                    await CompressVideoAsync(files);
+                    break;
+                case WheelActionKind.Compress when Formats.KindOf(files[0]) == FileKind.Document:
+                    CompressPdf(files);
+                    break;
                 case WheelActionKind.Compress:
                     Compress(files);
+                    break;
+                case WheelActionKind.Trim:
+                    await TrimAsync(files);
                     break;
             }
         }
@@ -374,7 +383,97 @@ public partial class App : Application
         {
             _queue!.Enqueue(files, new CompressTo(dialog.Result));
             if (dialog.PresetName is { } name)
-                AddPreset(new Preset(Preset.NewId(), name, Compress: dialog.Result));
+                AddPreset(new Preset(Preset.NewId(), name, Compress: dialog.Result, Kind: nameof(FileKind.Image)));
+        }
+    }
+
+    private async Task CompressVideoAsync(string[] files)
+    {
+        MediaInfo? info = null;
+        if (files.Length == 1)
+        {
+            try
+            {
+                info = await _ffmpeg!.ProbeAsync(files[0]);
+            }
+            catch (Exception ex)
+            {
+                // The dialog works without it; it just can't estimate the result's size.
+                Log.Write($"Couldn't read {files[0]}: {ex.Message}");
+            }
+        }
+        var dialog = Dialog(new VideoCompressDialog(files, info));
+        if (dialog.ShowDialog() == true && dialog.Result != null)
+        {
+            _queue!.Enqueue(files, new CompressTo(dialog.Result));
+            if (dialog.PresetName is { } name)
+                AddPreset(new Preset(Preset.NewId(), name, Compress: dialog.Result, Kind: nameof(FileKind.Video)));
+        }
+    }
+
+    private void CompressPdf(string[] files)
+    {
+        var dialog = Dialog(new PdfCompressDialog(files));
+        if (dialog.ShowDialog() == true && dialog.Result != null)
+        {
+            _queue!.Enqueue(files, new CompressTo(dialog.Result));
+            if (dialog.PresetName is { } name)
+                AddPreset(new Preset(Preset.NewId(), name, Compress: dialog.Result, Kind: nameof(FileKind.Document)));
+        }
+    }
+
+    /// <summary>One trim window per file, like cropping; cancelling one stops the rest.</summary>
+    private async Task TrimAsync(string[] files)
+    {
+        var items = new List<(string File, Operation Operation)>();
+        for (int i = 0; i < files.Length; i++)
+        {
+            string file = files[i];
+            MediaInfo info;
+            try
+            {
+                info = await _ffmpeg!.ProbeAsync(file);
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"Couldn't read {file} for trimming: {ex}");
+                Notify("Couldn't open file", $"{Path.GetFileName(file)}: {ex.Message}", Forms.ToolTipIcon.Warning);
+                continue;
+            }
+            if (info.Duration <= TimeSpan.FromSeconds(0.2))
+            {
+                Notify("Nothing to trim", $"{Path.GetFileName(file)} is too short to trim.", Forms.ToolTipIcon.Info);
+                continue;
+            }
+
+            Func<TimeSpan, Task<System.Windows.Media.ImageSource?>>? frameAt = info.HasVideo ? at => FrameAtAsync(file, at) : null;
+            var window = Dialog(new TrimDialog(file, info.Duration, files.Length > 1 ? $"{i + 1} of {files.Length}" : null, frameAt));
+            if (window.ShowDialog() != true || window.Result == null)
+                return;
+            items.Add((file, window.Result));
+        }
+        if (items.Count > 0)
+            _queue!.Enqueue(items);
+    }
+
+    /// <summary>A small picture of the frame at a time, for the trim window; null if there isn't one.</summary>
+    private async Task<System.Windows.Media.ImageSource?> FrameAtAsync(string file, TimeSpan at)
+    {
+        string png = Path.Combine(Path.GetTempPath(), $"Circularity-frame-{Guid.NewGuid():N}.png");
+        try
+        {
+            if (!await _ffmpeg!.ExtractFrameAtAsync(file, at, png, 480))
+                return null;
+            return await Task.Run(() => ImageConverter.LoadOriented(png));
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"Couldn't show the frame at {at} of {file}: {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            File.Delete(png);
         }
     }
 

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Circularity.Engine;
 
-/// <summary>What to do to a file: convert it, resize it or crop it.</summary>
+/// <summary>What to do to a file: convert, resize, crop, compress, trim or combine it.</summary>
 internal abstract record Operation
 {
     /// <summary>Added to the output file name, e.g. "photo (resized).jpg". Null for plain conversions.</summary>
@@ -47,8 +47,23 @@ internal sealed record CompressTo(CompressSpec Spec) : Operation
     public override string Describe() => "Compress";
 }
 
-/// <summary>Either a JPEG quality from 1 to 100, or the largest file size allowed, in bytes.</summary>
-internal sealed record CompressSpec(int? Quality = null, long? MaxBytes = null);
+/// <summary>
+/// Either a quality from 1 to 100, or the largest file size allowed, in bytes. For images the quality
+/// is the JPEG quality; for videos and PDFs it picks how hard to squeeze (see the dialogs). Videos can
+/// also be scaled down to at most <paramref name="MaxHeight"/> pixels tall.
+/// </summary>
+internal sealed record CompressSpec(int? Quality = null, long? MaxBytes = null, int? MaxHeight = null);
+
+/// <summary>Keeps the part of a video or audio file between two times.</summary>
+/// <param name="Exact">
+/// Re-encode, so the cut lands exactly on the chosen times. Otherwise the streams are copied as they
+/// are: instant and lossless, but a video can only start on a keyframe, so it may begin a little early.
+/// </param>
+internal sealed record TrimTo(TimeSpan Start, TimeSpan End, bool Exact) : Operation
+{
+    public override string? NameSuffix => "trimmed";
+    public override string Describe() => "Trim";
+}
 
 internal enum ResizeKind
 {

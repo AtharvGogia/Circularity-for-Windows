@@ -14,4 +14,9 @@
     <ProjectReference Include="..\Circularity\Circularity.csproj" />
   </ItemGroup>
 
+  <!-- Files the bundled FFmpeg can read but not write (HEIC, AVIF, Apple audio), made once and kept here. -->
+  <ItemGroup>
+    <None Include="Samples\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

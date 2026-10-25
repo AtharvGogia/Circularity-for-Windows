@@ -120,9 +120,13 @@ internal sealed class Settings
 }
 
 /// <summary>A saved resize or compress (exactly one of the two), shown on the wheel under its name.</summary>
-internal sealed record Preset(string Id, string Name, ResizeSpec? Resize = null, CompressSpec? Compress = null)
+/// <param name="Kind">For a compress, the kind of file it was saved from ("Image", "Video", "Document"), since
+/// "80%" or "under 5 MB" mean different things for each. Older presets have none, and were for images.</param>
+internal sealed record Preset(string Id, string Name, ResizeSpec? Resize = null, CompressSpec? Compress = null, string? Kind = null)
 {
     public const int MaxNameLength = 14;
+
+    public FileKind CompressesKind => Enum.TryParse<FileKind>(Kind, out var kind) ? kind : FileKind.Image;
 
     public Operation Operation => Resize != null ? new ResizeTo(Resize) : new CompressTo(Compress!);
 

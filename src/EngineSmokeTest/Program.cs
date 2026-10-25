@@ -115,6 +115,8 @@ internal static class Program
 
             // 4. Documents.
             await DocumentChecks(queue, dir, image);
+            await AppleFormatChecks(queue, ffmpeg.FfmpegPath, dir);
+            await CompressAndTrimChecks(queue, ffmpeg, dir, longVideo, audio, photo);
 
             // 5. A multi-file batch reports once, with every job finished.
             {
@@ -368,6 +370,186 @@ internal static class Program
         Check("documents with nothing in common don't blame Office", mixed.StartsWith("No format in common"), mixed);
 
         WheelButtonChecks();
+    }
+
+    /// <summary>
+    /// HEIC and AVIF photos, through Windows' codec where this PC has one and through FFmpeg as on a
+    /// PC without it; and Apple's audio containers. The samples are in Samples\, since the bundled
+    /// FFmpeg can read these formats but not write them.
+    /// </summary>
+    private static async Task AppleFormatChecks(ConversionQueue queue, string ffmpegPath, string dir)
+    {
+        string Sample(string name)
+        {
+            string copy = Path.Combine(dir, name);
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "Samples", name), copy, overwrite: true);
+            return copy;
+        }
+        async Task<ConversionJob> Do(string file, Operation operation) => (await Run(queue, new[] { file }, operation)).Jobs[0];
+        string Describe(ConversionJob job) => job.State == JobState.Succeeded
+            ? $"{ImageConverter.ReadSize(job.OutputPath!).Width}×{ImageConverter.ReadSize(job.OutputPath!).Height} {Path.GetFileName(job.OutputPath)}"
+            : $"{job.State}: {job.Error}";
+        bool Is(ConversionJob job, int width, int height) =>
+            job.State == JobState.Succeeded && ImageConverter.ReadSize(job.OutputPath!) == (width, height);
+
+        string upright = Sample("upright.heic"), rotated = Sample("rotated.heic"), avif = Sample("photo.avif");
+
+        var heicPng = await Do(upright, new ConvertTo("png"));
+        Check("heic -> png", Is(heicPng, 1200, 800), Describe(heicPng));
+        var rotatedJpg = await Do(rotated, new ConvertTo("jpg"));
+        Check("sideways heic comes out upright", Is(rotatedJpg, 800, 1200), Describe(rotatedJpg));
+
+        // As on a PC without the HEIF/HEVC (or AV1) extensions: FFmpeg does the decoding.
+        ImageConverter.SkipWindowsDecoder = true;
+        try
+        {
+            var viaFfmpeg = await Do(rotated, new ConvertTo("png"));
+            Check("heic without Windows' codec -> png, upright", Is(viaFfmpeg, 800, 1200), Describe(viaFfmpeg));
+            var resized = await Do(upright, new ResizeTo(new ResizeSpec(ResizeKind.Fit, 600, 600)));
+            Check("heic without Windows' codec: resize", Is(resized, 600, 400), Describe(resized));
+            var compressed = await Do(upright, new CompressTo(new CompressSpec(Quality: 70)));
+            Check("heic without Windows' codec: compress", compressed.State == JobState.Succeeded && compressed.OutputPath!.EndsWith(".jpg"), Describe(compressed));
+            var avifPng = await Do(avif, new ConvertTo("png"));
+            Check("avif without Windows' codec -> png", Is(avifPng, 600, 400), Describe(avifPng));
+        }
+        finally
+        {
+            ImageConverter.SkipWindowsDecoder = false;
+        }
+
+        foreach (var (name, target) in new[] { ("tone.caf", "mp3"), ("tone.aiff", "flac") })
+        {
+            var job = await Do(Sample(name), new ConvertTo(target));
+            Check($"{Path.GetExtension(name).TrimStart('.')} (Apple audio) -> {target}",
+                job.State == JobState.Succeeded && IsReadable(ffmpegPath, job.OutputPath!), job.State == JobState.Succeeded ? Path.GetFileName(job.OutputPath)! : $"{job.Error}");
+        }
+
+        var heicButtons = Formats.ActionsFor(new[] { "IMG_0001.HEIC" }, queue.CanHandle).Actions.Select(a => a.Label).ToList();
+        Check("heic offers png/jpg but never heic", heicButtons.Contains("PNG") && heicButtons.Contains("JPG") && !heicButtons.Contains("HEIC"),
+            string.Join(" ", heicButtons));
+    }
+
+    /// <summary>Compressing videos and PDFs, and trimming videos and audio.</summary>
+    private static async Task CompressAndTrimChecks(ConversionQueue queue, FfmpegConverter ffmpeg, string dir, string longVideo, string audio, string photo)
+    {
+        async Task<ConversionJob> Do(string file, Operation operation) => (await Run(queue, new[] { file }, operation)).Jobs[0];
+        string Name(ConversionJob job) => job.State == JobState.Succeeded ? Path.GetFileName(job.OutputPath)! : $"{job.State}: {job.Error}";
+        long Bytes(string path) => new FileInfo(path).Length;
+
+        // 5 s of 720p with film-grain noise at a deliberately high bitrate: something worth compressing.
+        string clip = Path.Combine(dir, "holiday.webm");
+        Ffmpeg(ffmpeg.FfmpegPath!, "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=5", "-f", "lavfi", "-i", "sine=frequency=330:duration=5",
+            "-vf", "noise=alls=12:allf=t", "-c:v", "libvpx-vp9", "-b:v", "6M", "-deadline", "realtime", "-cpu-used", "8", "-c:a", "libopus", clip);
+        long clipBytes = Bytes(clip);
+
+        var balanced = await Do(clip, new CompressTo(new CompressSpec(Quality: 60)));
+        var balancedInfo = balanced.State == JobState.Succeeded ? await ffmpeg.ProbeAsync(balanced.OutputPath!) : null;
+        Check("video compress (balanced) is smaller, same size picture",
+            balancedInfo != null && Bytes(balanced.OutputPath!) < clipBytes && balancedInfo is { Width: 1280, Height: 720 } && IsReadable(ffmpeg.FfmpegPath!, balanced.OutputPath!),
+            balancedInfo != null ? $"{FileSizes.Format(clipBytes)} -> {FileSizes.Format(Bytes(balanced.OutputPath!))}, {balancedInfo.Width}×{balancedInfo.Height}" : Name(balanced));
+
+        long target = clipBytes / 4;
+        var sized = await Do(clip, new CompressTo(new CompressSpec(MaxBytes: target)));
+        Check("video compress to a target size stays under it", sized.State == JobState.Succeeded && Bytes(sized.OutputPath!) <= target,
+            sized.State == JobState.Succeeded ? $"{FileSizes.Format(Bytes(sized.OutputPath!))} (limit {FileSizes.Format(target)})" : Name(sized));
+
+        var small = await Do(clip, new CompressTo(new CompressSpec(Quality: 60, MaxHeight: 480)));
+        var smallInfo = small.State == JobState.Succeeded ? await ffmpeg.ProbeAsync(small.OutputPath!) : null;
+        Check("video compress to 480p", smallInfo?.Height == 480, smallInfo != null ? $"{smallInfo.Width}×{smallInfo.Height}" : Name(small));
+
+        // Trims: exact and quick, of the 60 s clip; and of a sound.
+        var exact = await Do(longVideo, new TrimTo(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15), Exact: true));
+        var exactLength = exact.State == JobState.Succeeded ? (await ffmpeg.ProbeAsync(exact.OutputPath!)).Duration.TotalSeconds : 0;
+        Check("exact trim keeps 10-15 s", Math.Abs(exactLength - 5) < 0.2, exact.State == JobState.Succeeded ? $"{exactLength:0.00} s, {Path.GetFileName(exact.OutputPath)}" : Name(exact));
+
+        var quick = await Do(longVideo, new TrimTo(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15), Exact: false));
+        var quickLength = quick.State == JobState.Succeeded ? (await ffmpeg.ProbeAsync(quick.OutputPath!)).Duration.TotalSeconds : 0;
+        Check("quick trim is about 5 s and keeps the format", quickLength is > 4.5 and < 8 && quick.OutputPath!.EndsWith(".mkv"),
+            quick.State == JobState.Succeeded ? $"{quickLength:0.00} s, {Path.GetFileName(quick.OutputPath)}" : Name(quick));
+
+        // The trim window's previews: a frame mid-way, and one at the very end (where there's no frame left to show).
+        var frames = new List<string>();
+        foreach (double at in new[] { 2.5, 5.0 })
+        {
+            string frame = Path.Combine(dir, $"frame-{at}.png");
+            if (await ffmpeg.ExtractFrameAtAsync(clip, TimeSpan.FromSeconds(at), frame, 480))
+                frames.Add($"{at} s: {ImageConverter.ReadSize(frame).Width} px wide");
+        }
+        Check("trim previews: frames mid-way and at the end", frames.Count == 2 && frames.All(f => f.EndsWith("480 px wide")), string.Join("; ", frames));
+
+        var sound = await Do(audio, new TrimTo(TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(1.5), Exact: true));
+        var soundLength = sound.State == JobState.Succeeded ? (await ffmpeg.ProbeAsync(sound.OutputPath!)).Duration.TotalSeconds : 0;
+        Check("audio trim keeps 1 s", Math.Abs(soundLength - 1) < 0.05, sound.State == JobState.Succeeded ? $"{soundLength:0.000} s" : Name(sound));
+
+        // A PDF page with a line of text and two pictures drawn far smaller than their pixel size, the
+        // way scans and phone photos usually end up in PDFs: a 12-megapixel PNG and a JPEG.
+        const string Marker = "Papaya";
+        string pdf = Path.Combine(dir, "brochure.pdf");
+        var photoPicture = ImageConverter.LoadOriented(photo);
+        byte[] png = File.ReadAllBytes(photo);
+        var jpegEncoder = new System.Windows.Media.Imaging.JpegBitmapEncoder { QualityLevel = 95 };
+        jpegEncoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(photoPicture));
+        using (var jpegStream = new MemoryStream())
+        {
+            jpegEncoder.Save(jpegStream);
+            var builder = new UglyToad.PdfPig.Writer.PdfDocumentBuilder();
+            var font = builder.AddStandard14Font(UglyToad.PdfPig.Fonts.Standard14Fonts.Standard14Font.Helvetica);
+            var page = builder.AddPage(UglyToad.PdfPig.Content.PageSize.A4);
+            page.AddText($"Brochure {Marker}", 18, new UglyToad.PdfPig.Core.PdfPoint(50, 790), font);
+            page.AddPng(png, new UglyToad.PdfPig.Core.PdfRectangle(50, 420, 545, 760));
+            page.AddJpeg(jpegStream.ToArray(), new UglyToad.PdfPig.Core.PdfRectangle(50, 60, 545, 400));
+            File.WriteAllBytes(pdf, builder.Build());
+        }
+
+        var compressedPdf = await Do(pdf, new CompressTo(new CompressSpec(Quality: 60)));
+        bool pdfOk = compressedPdf.State == JobState.Succeeded;
+        Check("pdf compress is much smaller",
+            pdfOk && Bytes(compressedPdf.OutputPath!) < Bytes(pdf) / 3,
+            pdfOk ? $"{FileSizes.Format(Bytes(pdf))} -> {FileSizes.Format(Bytes(compressedPdf.OutputPath!))}" : Name(compressedPdf));
+        if (pdfOk)
+        {
+            Check("compressed pdf keeps its text and pages", PdfPages(compressedPdf.OutputPath!) == 1 && PdfText(compressedPdf.OutputPath!).Contains(Marker),
+                PdfText(compressedPdf.OutputPath!));
+            // Both pictures still there: the rendered page looks like the original's.
+            using var before = PdfiumDocument.Open(pdf);
+            using var after = PdfiumDocument.Open(compressedPdf.OutputPath!);
+            double difference = MeanDifference(before.RenderPage(0, 0.5, 2000), after.RenderPage(0, 0.5, 2000));
+            Check("compressed pdf looks the same", difference < 6, $"average difference {difference:0.0} of 255");
+        }
+
+        // Nothing to shrink in a text-only PDF: a clear message, and no file left behind.
+        string textOnly = Directory.GetFiles(dir, "notes*.pdf").First();
+        var nothing = await Do(textOnly, new CompressTo(new CompressSpec(Quality: 60)));
+        Check("text-only pdf says it can't be made smaller", nothing.State == JobState.Failed && nothing.Error!.Contains("can't be made smaller"), $"{nothing.State}: {nothing.Error}");
+
+        // Which tools are offered for what.
+        string Tools(params string[] names) => string.Join(" ", Formats.ActionsFor(names, queue.CanHandle).Actions.Where(a => a.IsTool).Select(a => a.Label));
+        Check("videos get Trim and Compress", Tools("a.mp4") is var v && v.Contains("Trim") && v.Contains("Compress"), Tools("a.mp4"));
+        Check("audio gets Trim", Tools("a.mp3") == "Trim", Tools("a.mp3"));
+        Check("PDFs get Compress, Word files don't", Tools("a.pdf") == "Compress" && !Tools("a.docx").Contains("Compress"), $"pdf: {Tools("a.pdf")}; docx: {Tools("a.docx")}");
+        Check("a mix of photos and videos gets neither", !Tools("a.jpg", "b.mp4").Contains("Compress") && !Tools("a.jpg", "b.mp4").Contains("Trim"), Tools("a.jpg", "b.mp4"));
+    }
+
+    /// <summary>Average difference per colour channel between two same-sized pictures, 0 to 255.</summary>
+    private static double MeanDifference(System.Windows.Media.Imaging.BitmapSource a, System.Windows.Media.Imaging.BitmapSource b)
+    {
+        if (a.PixelWidth != b.PixelWidth || a.PixelHeight != b.PixelHeight)
+            return 255;
+        byte[] Pixels(System.Windows.Media.Imaging.BitmapSource s)
+        {
+            var bgr = new System.Windows.Media.Imaging.FormatConvertedBitmap(s, System.Windows.Media.PixelFormats.Bgr32, null, 0);
+            var bytes = new byte[bgr.PixelWidth * bgr.PixelHeight * 4];
+            bgr.CopyPixels(bytes, bgr.PixelWidth * 4, 0);
+            return bytes;
+        }
+        byte[] pa = Pixels(a), pb = Pixels(b);
+        long total = 0;
+        for (int i = 0; i < pa.Length; i++)
+        {
+            if (i % 4 != 3)
+                total += Math.Abs(pa[i] - pb[i]);
+        }
+        return total / (pa.Length * 0.75);
     }
 
     /// <summary>The user's button order, hidden buttons and saved presets, as the wheel sees them.</summary>

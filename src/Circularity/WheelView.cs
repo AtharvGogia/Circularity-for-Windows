@@ -610,12 +610,10 @@ internal sealed class WheelView : Canvas
             // clockwise end above it.
             double mid = ArcCenter + ArcDirection * ((i + 0.5) * _arcStep - _arcSpan / 2);
             double from = mid - _arcStep / 2;
-            bool atStart = Math.Abs(from - arcFrom) < 0.01, atEnd = Math.Abs(from + _arcStep - to) < 0.01;
             var shape = Segment(from, from + _arcStep, ArcInner, ArcOuter, Gap, corner);
-            // Square outer corners like the ring's, except at the arc's two ends, where they follow
-            // the backdrop's rounded corner instead of poking out past it.
-            var glow = Band(from, from + _arcStep, ArcInner, ArcRim, Gap / 2, corner, 0,
-                startOuterCorner: atStart ? corner : 0, endOuterCorner: atEnd ? corner : 0);
+            // Square outer corners like the ring's, the end buttons included, which pop out past the
+            // arc's rounded ends a little when lit, the way ring buttons pop out past the disc's edge.
+            var glow = Band(from, from + _arcStep, ArcInner, ArcRim, Gap / 2, corner, 0);
             AddButton(_arcLayer, _arcTargets[i], _actions[_arcTargets[i]], shape, corner, glow, _settings.Accent,
                 mid, labelRadius, glyphSize, labelSize);
         }
@@ -748,13 +746,9 @@ internal sealed class WheelView : Canvas
     /// </summary>
     /// <param name="side">How far each side sits inside its radial line; negative puts it outside.</param>
     /// <param name="closed">False leaves off the inner edge, for an outline that stops at the disc.</param>
-    /// <param name="startOuterCorner">Overrides <paramref name="outerCorner"/> on the start side only.</param>
-    /// <param name="endOuterCorner">Overrides <paramref name="outerCorner"/> on the end side only.</param>
     private PathGeometry Band(double fromDeg, double toDeg, double inner, double outer, double side,
-                              double innerCorner, double outerCorner, bool closed = true,
-                              double? startOuterCorner = null, double? endOuterCorner = null)
+                              double innerCorner, double outerCorner, bool closed = true)
     {
-        double startCorner = startOuterCorner ?? outerCorner, endCorner = endOuterCorner ?? outerCorner;
         // Point "along" the radial line at an angle, then "across" it towards the band's inside.
         Point At(double degrees, bool isStart, double along, double across)
         {
@@ -780,8 +774,8 @@ internal sealed class WheelView : Canvas
             return (At(degrees, isStart, along, side), new Point(Mid + (centre.X - Mid) * scale, Mid + (centre.Y - Mid) * scale));
         }
 
-        var startOut = Corner(fromDeg, true, outer, startCorner, true);
-        var endOut = Corner(toDeg, false, outer, endCorner, true);
+        var startOut = Corner(fromDeg, true, outer, outerCorner, true);
+        var endOut = Corner(toDeg, false, outer, outerCorner, true);
         var endIn = Corner(toDeg, false, inner, innerCorner, false);
         var startIn = Corner(fromDeg, true, inner, innerCorner, false);
         bool large = toDeg - fromDeg > 180;
@@ -796,9 +790,9 @@ internal sealed class WheelView : Canvas
         // the end side, then back along the inner edge.
         var figure = new PathFigure { StartPoint = startIn.Side, IsClosed = closed };
         figure.Segments.Add(new LineSegment(startOut.Side, true));
-        Fillet(figure, startOut.Edge, startCorner);
+        Fillet(figure, startOut.Edge, outerCorner);
         figure.Segments.Add(new ArcSegment(endOut.Edge, new Size(outer, outer), 0, large, SweepDirection.Clockwise, true));
-        Fillet(figure, endOut.Side, endCorner);
+        Fillet(figure, endOut.Side, outerCorner);
         figure.Segments.Add(new LineSegment(endIn.Side, true));
         if (closed)
         {

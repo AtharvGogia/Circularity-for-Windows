@@ -61,15 +61,29 @@ A tray app that:
    files, opens Settings), so these never start a second copy.
 4. Runs the job in the background:
    - **Images** → PNG, JPG, BMP, GIF, TIFF (Windows Imaging Component), WebP (decoded by Windows,
-     encoded by FFmpeg's libwebp), PDF
-   - **Video** → MP4, WebM, MOV, GIF, MP3 (FFmpeg)
-   - **Audio** → MP3, WAV, FLAC, OGG, M4A (FFmpeg)
+     encoded by FFmpeg's libwebp), PDF. **iPhone HEIC/HEIF photos and AVIF** are read too: by
+     Windows when it has the codec, otherwise by the bundled FFmpeg, so they work without buying
+     Microsoft's HEVC extension. Photos taken sideways come out the right way up.
+   - **Video** → MP4, WebM, MOV, GIF, MP3 (FFmpeg); reads iPhone HEVC and ProRes videos too
+   - **Audio** → MP3, WAV, FLAC, OGG, M4A (FFmpeg); reads Apple's CAF, AIFF and Apple Lossless too
    - **Resize** (images and video): to a width × height, keeping the aspect ratio (fit inside) or
      not (stretch). Opens a small dialog that shows the resulting size.
-   - **Compress** (images): by **quality** percentage, or to a **target file size** (e.g. 500 KB),
-     where it keeps the highest quality that fits and scales the picture down only if even low
-     quality is too big. Saved as JPG (transparent areas become white); the notification shows the
-     size before and after.
+   - **Compress**:
+     - **Images**: by **quality** percentage, or to a **target file size** (e.g. 500 KB), where it
+       keeps the highest quality that fits and scales the picture down only if even low quality is
+       too big. Saved as JPG (transparent areas become white); the notification shows the size before
+       and after.
+     - **Videos**: higher quality / balanced / smaller file, or to a **target size** (e.g. 25 MB, with
+       buttons for common limits), optionally at a lower resolution (1080p, 720p, 480p). The window
+       estimates the result's size. Saved as H.264 MP4, which plays everywhere; a target size that
+       would make the picture too blocky lowers the resolution automatically.
+     - **PDFs**: light (200 dpi), balanced (150 dpi) or strong (100 dpi). Only the pictures inside are
+       re-saved smaller (with PDFium); text and drawings stay exactly as they were. Every page is
+       compared with the original afterwards, and if any would look different, the PDF is left alone.
+   - **Trim** (videos and audio): pick the start and end with sliders or by typing a time, with the
+     frame at each cut point shown. **Exact cut** re-encodes so it starts and ends exactly there;
+     **quick cut** copies the streams (instant, no quality loss, but a video may start a little early,
+     at the previous keyframe).
    - **Crop** (images and video): opens an editor with a crop box you can move, resize from any
      corner or edge, or redraw, optionally locked to 1:1, 4:3, 3:2, 16:9 or 9:16. Videos are
      shown as a frame from about one second in. Several files are cropped one after another.
@@ -87,9 +101,10 @@ A tray app that:
      open. A password-protected file fails straight away instead of asking for a password, and an
      Office job that hangs is stopped after 3 minutes.
    - **Combine** (two or more images and/or PDFs): one PDF with every page, in the order dropped.
-   - **Your own buttons**: tick "Also add this as a button on the wheel" in the Resize or Compress
+   - **Your own buttons**: tick "Also add this as a button on the wheel" in a Resize or Compress
      window, and that exact resize or compression becomes a one-click button (named, say,
-     "1920×1080" or "Under 500 KB"). These run straight away, without the window.
+     "1920×1080" or "Under 25 MB"). These run straight away, without the window. A compression
+     button only appears for the kind of file it was made for (a video one for videos, and so on).
 
 Results are saved as new copies next to the original: `photo.png`, `photo (resized).jpg`,
 `photo (cropped).jpg`, `photo (compressed).jpg`, `scan (combined).pdf`, with ` (1)`, ` (2)`... if the name is taken. The original is never touched:
@@ -246,15 +261,11 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
   browsers and mail apps, see `App.xaml.cs`) and nothing full-screen is running.
 - Dragging from an app running as administrator won't drop onto the wheel; Windows blocks
   drops from elevated apps into normal ones.
-- HEIC and WebP input need Microsoft's free HEIF / WebP image extensions installed. They can't
-  be written, so resizing or cropping them produces a JPG.
+- HEIC, HEIF and AVIF can be read but not written, so resizing or cropping them produces a JPG.
+  Without Microsoft's image extensions they're decoded by FFmpeg, which takes a moment longer.
+- iPhone videos filmed in HDR can come out with paler colours when converted, since the bundled
+  FFmpeg has no HDR-to-SDR tone mapping.
 - Animated GIFs are edited as their first frame only.
-- Licensing: the FFmpeg bundled in the installer is LGPL (see above), so Circularity can stay
-  closed-source. The Gyan "full" FFmpeg suggested for development is GPL; don't ship that one.
-- The other libraries are fine for a closed-source app: PdfPig (Apache-2.0), Markdig (BSD-2-Clause),
-  PDFium (BSD-3-Clause / Apache-2.0, with permissive licences for what it bundles), WebView2
-  (Microsoft's redistributable licence). PDFsharp was deliberately not used: from 6.5 it's
-  AGPL, which would force the whole app to be open-source.
 - PDF → DOCX isn't offered. Word can do it, but first shows a "Word will now convert your PDF"
   prompt that an invisible Word can't answer. Silencing it means changing a Word option.
 - Markdown/HTML/TXT → PDF needs the WebView2 runtime. It's part of Windows 11 and most up-to-date
@@ -273,7 +284,9 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 | `DropFeedback.cs` | The label under a dragged file ("Convert to PNG", "Cancel") while it's over the wheel. |
 | `Diagnostics.cs` | What was found on this PC, for the About tab and "Copy diagnostics". |
 | `ResizeDialog.xaml(.cs)` | Resize options. |
-| `CompressDialog.xaml(.cs)` | Compression options (quality or target size). |
+| `CompressDialog.xaml(.cs)` | Image compression options (quality or target size). |
+| `VideoCompressDialog.xaml(.cs)` / `PdfCompressDialog.xaml(.cs)` | Video and PDF compression options. |
+| `TrimDialog.xaml(.cs)` / `Times.cs` | Trim window for videos and audio / reading and writing times like "1:23.4". |
 | `CropWindow.xaml(.cs)` | Crop editor. |
 | `AppIcon.cs` | Draws the accent-coloured app icon at runtime. |
 | `Engine/ConversionQueue.cs` | Background job queue (two at a time): progress, cancellation, per-drop batches, cleanup of failed output. |
@@ -309,3 +322,16 @@ The repository has to be public for the updater to see releases.
 Circularity is open source under the [MIT licence](LICENSE): © 2026 Atharv Gogia. The installer
 bundles third-party components under their own licences (FFmpeg under the LGPL, and others);
 they're listed in `build/installer/THIRD-PARTY-NOTICES.txt` and ship in the app's `licenses` folder.
+
+Everything bundled was chosen so that Circularity itself can stay under the MIT licence:
+
+- **FFmpeg** is a custom LGPL build (see [Build the installer](#build-the-installer)). It's a
+  separate program Circularity runs, which anyone can swap for their own build. It leaves out x264
+  and every other GPL part, since shipping those would bring the GPL's terms into the installer.
+  The Gyan "full" FFmpeg suggested for development *is* GPL, so it's fine on your own PC but must
+  not be shipped.
+- **PdfPig** (Apache-2.0), **Markdig** (BSD-2-Clause), **PDFium** (BSD-3-Clause / Apache-2.0, plus
+  permissive licences for what it bundles) and the **WebView2** SDK (Microsoft's redistributable
+  licence) all allow use in an MIT project.
+- **PDFsharp** was deliberately not used: from version 6.5 it's AGPL, which would require
+  Circularity to be released under the AGPL instead of MIT.

@@ -92,6 +92,10 @@ internal static class Previews
                 ("welcome", theme => new WelcomeWindow(new Settings { Theme = theme })),
                 ("resize", _ => new ResizeDialog(sample, (4032, 3024))),
                 ("compress", _ => new CompressDialog(sample)),
+                ("compress-video", _ => new VideoCompressDialog(sample, new MediaInfo(TimeSpan.FromSeconds(151), 1920, 1080, 30, 12_000_000, true))),
+                ("compress-pdf", _ => new PdfCompressDialog(sample)),
+                ("trim", _ => new TrimDialog("holiday.mp4", TimeSpan.FromSeconds(151.4), null,
+                    _ => System.Threading.Tasks.Task.FromResult<ImageSource?>(picture))),
                 ("crop", _ => new CropWindow(picture, "holiday.png", 1, 2)),
             };
             foreach (var theme in new[] { AppTheme.Dark, AppTheme.Light })
@@ -109,6 +113,8 @@ internal static class Previews
                     // The About tab fills in once it has looked around the PC.
                     if (name == "settings-about")
                         Settle(2500);
+                    if (name == "trim")
+                        Settle(600); // The cut-point previews load after a short pause.
                     // The window's own backdrop (Mica) isn't part of its content, so paint a plain one behind it.
                     var backdrop = theme == AppTheme.Dark ? Color.FromRgb(0x20, 0x20, 0x20) : Color.FromRgb(0xF3, 0xF3, 0xF3);
                     Save((FrameworkElement)window.Content, Path.Combine(folder, $"{name}-{theme.ToString().ToLowerInvariant()}.png"),

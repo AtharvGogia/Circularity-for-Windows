@@ -1,0 +1,62 @@
+<Window x:Class="Circularity.TrimDialog"
+        x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Trim"
+        Width="520" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True"
+        ThemeMode="System">
+    <StackPanel Margin="24">
+        <TextBlock x:Name="Heading" FontSize="20" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+        <TextBlock x:Name="SubHeading" Opacity="0.7" Margin="0,4,0,18" TextWrapping="Wrap" />
+
+        <!-- The frames at the two cut points (videos only). -->
+        <Grid x:Name="Previews" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition />
+            </Grid.ColumnDefinitions>
+            <Border CornerRadius="6" ClipToBounds="True" Background="#22808080" Height="128">
+                <Image x:Name="StartFrame" Stretch="Uniform" />
+            </Border>
+            <Border Grid.Column="2" CornerRadius="6" ClipToBounds="True" Background="#22808080" Height="128">
+                <Image x:Name="EndFrame" Stretch="Uniform" />
+            </Border>
+        </Grid>
+
+        <TextBlock Text="Start" Margin="0,0,0,4" />
+        <DockPanel>
+            <TextBox x:Name="StartBox" DockPanel.Dock="Right" Width="88" Margin="12,0,0,0" TextAlignment="Right" />
+            <Slider x:Name="StartSlider" VerticalAlignment="Center" SmallChange="0.1" LargeChange="1" />
+        </DockPanel>
+
+        <TextBlock Text="End" Margin="0,12,0,4" />
+        <DockPanel>
+            <TextBox x:Name="EndBox" DockPanel.Dock="Right" Width="88" Margin="12,0,0,0" TextAlignment="Right" />
+            <Slider x:Name="EndSlider" VerticalAlignment="Center" SmallChange="0.1" LargeChange="1" />
+        </DockPanel>
+
+        <TextBlock x:Name="KeepText" Margin="0,14,0,0" Opacity="0.8" />
+
+        <RadioButton x:Name="ExactCut" GroupName="Cut" IsChecked="True" Margin="0,16,0,0">
+            <StackPanel>
+                <TextBlock Text="Exact cut" />
+                <TextBlock Text="Starts and ends exactly where you chose. Re-encodes, so long files take a while." Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
+        </RadioButton>
+        <RadioButton x:Name="QuickCut" GroupName="Cut" Margin="0,8,0,0">
+            <StackPanel>
+                <TextBlock Text="Quick cut" />
+                <TextBlock x:Name="QuickCutText" Text="Instant, with no loss in quality, but a video may start up to a few seconds early." Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
+        </RadioButton>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+            <Button Content="Cancel" IsCancel="True" MinWidth="96" Margin="0,0,8,0" />
+            <Button x:Name="OkButton" Content="Trim" IsDefault="True" MinWidth="96" Click="Ok_Click" />
+        </StackPanel>
+    </StackPanel>
+</Window>

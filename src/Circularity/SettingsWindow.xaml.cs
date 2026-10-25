@@ -205,6 +205,7 @@ internal partial class SettingsWindow : Window
                 : onRing.Contains(id) ? "On the wheel"
                 : inArc.Contains(id) ? "Behind More"
                 : action.Kind == WheelActionKind.Combine ? "When several files are dropped"
+                : action.Kind == WheelActionKind.Compress && _kind == FileKind.Document ? "For PDFs"
                 : action.Kind == WheelActionKind.Convert && !Formats.Offers(_sample, action.Target!) ? $"Not for .{ext} files"
                 : "Not available on this PC";
             ButtonList.Children.Add(ButtonRow(action, where, i, all.Count, !hidden.Contains(id)));
