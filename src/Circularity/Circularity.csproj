@@ -50,4 +50,13 @@
     <PackageReference Include="Svg.Skia" Version="5.2.3" />
   </ItemGroup>
 
+  <!-- SkiaSharp's native libraries come with their debug symbols (over 100 MB), which only matter for
+       debugging Skia itself, so they're left out of the published app. -->
+  <Target Name="LeaveOutNativeDebugSymbols" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(Extension)' == '.pdb' and ($([System.String]::Copy('%(Filename)').StartsWith('libSkiaSharp')) or $([System.String]::Copy('%(Filename)').StartsWith('libHarfBuzzSharp')))" />
+    </ItemGroup>
+  </Target>
+
 </Project>
