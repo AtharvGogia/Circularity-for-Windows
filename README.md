@@ -151,7 +151,7 @@ It produces, in `artifacts\`:
 
 | Output | What it is | Size |
 | --- | --- | --- |
-| `artifacts\CircularitySetup-0.3.2.exe` | The installer to hand out | ~67 MB |
+| `artifacts\CircularitySetup-0.3.3.exe` | The installer to hand out | ~67 MB |
 | `artifacts\Circularity\Circularity.exe` | The app itself, in a self-contained folder that also runs without installing (e.g. from a USB stick) | ~222 MB folder |
 
 The installer:
@@ -312,7 +312,7 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 The in-app updater looks at this repository's latest GitHub release, so a release must:
 
 1. be tagged with the version, e.g. `v0.3.0` (matching `<Version>` in `src/Circularity/Circularity.csproj`), and
-2. have the installer from `build\build.ps1`, `CircularitySetup-0.3.2.exe`, attached as an asset.
+2. have the installer from `build\build.ps1`, `CircularitySetup-0.3.3.exe`, attached as an asset.
 
 Whatever is written in the release's description is shown in the update window as "what's new".
 The repository has to be public for the updater to see releases.
