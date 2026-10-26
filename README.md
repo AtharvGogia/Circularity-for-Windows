@@ -155,8 +155,8 @@ It produces, in `artifacts\`:
 
 | Output | What it is | Size |
 | --- | --- | --- |
-| `artifacts\CircularitySetup-0.3.4.exe` | The installer to hand out | ~67 MB |
-| `artifacts\Circularity\Circularity.exe` | The app itself, in a self-contained folder that also runs without installing (e.g. from a USB stick) | ~222 MB folder |
+| `artifacts\CircularitySetup-0.3.4.exe` | The installer to hand out | ~72 MB |
+| `artifacts\Circularity\Circularity.exe` | The app itself, in a self-contained folder that also runs without installing (e.g. from a USB stick) | ~240 MB folder |
 
 The installer:
 
