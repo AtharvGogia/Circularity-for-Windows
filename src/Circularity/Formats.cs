@@ -37,6 +37,7 @@ internal static class Glyphs
     public const string Pdf = "";
     public const string Document = "";
     public const string Web = "";
+    public const string Svg = ""; // same as photo for now
     public const string Resize = "";
     public const string Crop = "";
     public const string Compress = "";
@@ -109,6 +110,8 @@ internal static class Formats
         ["png"] = FileKind.Image, ["jpg"] = FileKind.Image, ["jpeg"] = FileKind.Image, ["jfif"] = FileKind.Image,
         ["bmp"] = FileKind.Image, ["gif"] = FileKind.Image, ["tif"] = FileKind.Image, ["tiff"] = FileKind.Image,
         ["webp"] = FileKind.Image, ["ico"] = FileKind.Image,
+        // SVG: read via Svg.Skia
+        ["svg"] = FileKind.Image,
         // iPhone and camera HEIF photos, and AVIF: read by Windows if it has the codec, else by FFmpeg.
         ["heic"] = FileKind.Image, ["heif"] = FileKind.Image, ["hif"] = FileKind.Image, ["avif"] = FileKind.Image,
 

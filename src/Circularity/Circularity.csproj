@@ -46,6 +46,8 @@
     <PackageReference Include="PdfPig" Version="0.1.16" />
     <!-- PDFium (the PDF engine in Chrome), prebuilt: renders PDF pages to images on the CPU. -->
     <PackageReference Include="bblanchon.PDFium.Win32" Version="157.0.8086" />
+    <!-- SVG rendering via SkiaSharp -->
+    <PackageReference Include="Svg.Skia" Version="1.0.0" />
   </ItemGroup>
 
 </Project>

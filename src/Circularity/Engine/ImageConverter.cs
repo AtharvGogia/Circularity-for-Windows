@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using SkiaSharp;
+using Svg.Skia;
 
 namespace Circularity.Engine;
 
@@ -22,6 +24,10 @@ internal sealed class ImageConverter : IConverter
 
     /// <summary>What decodes images Windows can't, for every caller of <see cref="LoadOriented"/>.</summary>
     private static FfmpegConverter? _fallbackDecoder;
+
+    /// <summary>Whether the file is an SVG (handled by Svg.Skia).</summary>
+    private static bool IsSvg(string path) =>
+        Formats.NormalizedExtension(path) == "svg";
 
     /// <summary>For tests: behave like a PC with no Windows codec for any image, so FFmpeg decodes everything.</summary>
     internal static bool SkipWindowsDecoder { get; set; }
@@ -113,9 +119,14 @@ internal sealed class ImageConverter : IConverter
     /// <summary>
     /// Decodes the first frame, rotated upright according to its EXIF orientation. Frozen, so any
     /// thread can use it. When Windows has no codec for the file, FFmpeg decodes it instead.
+    /// SVG files are decoded via Svg.Skia.
     /// </summary>
     public static BitmapSource LoadOriented(string path)
     {
+        // SVG files are handled by Svg.Skia
+        if (IsSvg(path))
+            return LoadSvg(path);
+
         try
         {
             if (!SkipWindowsDecoder)
@@ -160,9 +171,58 @@ internal sealed class ImageConverter : IConverter
     private static bool IsUnreadable(Exception ex) =>
         ex is NotSupportedException or FileFormatException or System.Runtime.InteropServices.COMException or ArgumentException or OverflowException;
 
+    /// <summary>Loads an SVG file via Svg.Skia and returns a frozen BitmapSource.</summary>
+    private static BitmapSource LoadSvg(string path)
+    {
+        using var stream = File.OpenRead(path);
+        var svg = new SKSvg();
+        svg.Load(stream);
+
+        // Get the SVG's natural size
+        var picture = svg.Picture;
+        if (picture == null)
+            throw new InvalidOperationException($"Couldn't parse SVG: {Path.GetFileName(path)}");
+
+        var bounds = picture.CullRect;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            // Default to a reasonable size if no dimensions found
+            bounds = new SKRect(0, 0, 100, 100);
+        }
+
+        // Render to a bitmap at a reasonable DPI (96 DPI)
+        // We'll scale to at most 2048px on the longest side to avoid huge memory usage
+        const int maxDimension = 2048;
+        float scale = Math.Min(1f, maxDimension / Math.Max(bounds.Width, bounds.Height));
+        int width = (int)Math.Round(bounds.Width * scale);
+        int height = (int)Math.Round(bounds.Height * scale);
+
+        using var surface = SKSurface.Create(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul));
+        var canvas = surface.Canvas;
+        canvas.Clear(SKColors.Transparent);
+        canvas.Scale(scale);
+        canvas.DrawPicture(picture);
+
+        using var image = surface.Snapshot();
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        using var memoryStream = new MemoryStream(data.ToArray());
+
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.StreamSource = memoryStream;
+        bitmap.EndInit();
+        bitmap.Freeze();
+        return bitmap;
+    }
+
     /// <summary>Upright pixel size, read from the file header without decoding the whole image when Windows can.</summary>
     public static (int Width, int Height) ReadSize(string path)
     {
+        // SVG files: read dimensions via Svg.Skia without full rasterization
+        if (IsSvg(path))
+            return ReadSvgSize(path);
+
         try
         {
             if (!SkipWindowsDecoder)
@@ -180,6 +240,24 @@ internal sealed class ImageConverter : IConverter
         }
         var image = LoadOriented(path);
         return (image.PixelWidth, image.PixelHeight);
+    }
+
+    /// <summary>Reads SVG dimensions via Svg.Skia without rasterizing the whole image.</summary>
+    private static (int Width, int Height) ReadSvgSize(string path)
+    {
+        using var stream = File.OpenRead(path);
+        var svg = new SKSvg();
+        svg.Load(stream);
+
+        var picture = svg.Picture;
+        if (picture == null)
+            throw new InvalidOperationException($"Couldn't parse SVG: {Path.GetFileName(path)}");
+
+        var bounds = picture.CullRect;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+            bounds = new SKRect(0, 0, 100, 100);
+
+        return ((int)Math.Ceiling(bounds.Width), (int)Math.Ceiling(bounds.Height));
     }
 
     private static BitmapSource Resize(BitmapSource image, (int Width, int Height) size)

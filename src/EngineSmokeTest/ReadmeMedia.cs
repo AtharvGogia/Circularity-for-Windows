@@ -264,14 +264,132 @@ internal static class ReadmeMedia
 
         public void Backdrop()
         {
-            _canvas.Background = new LinearGradientBrush(Color.FromRgb(0x4B, 0x5F, 0xC9), Color.FromRgb(0x2A, 0x9D, 0x8F), 35);
+            // Windows 11 default wallpaper blue with subtle gradient
+            _canvas.Background = new LinearGradientBrush(
+                Color.FromRgb(0x00, 0x4D, 0x8D),
+                Color.FromRgb(0x00, 0x30, 0x60),
+                90);
         }
 
-        /// <summary>A mock desktop with a folder window full of file tiles.</summary>
+        /// <summary>A mock desktop with a folder window, taskbar, and desktop icons.</summary>
         public void Desktop(string[] files)
         {
             Backdrop();
             _files = files;
+
+            // Desktop icons (top-left)
+            var iconTexts = new[] { "📁  This PC", "📁  Documents", "🖼️  Photos", "📄  Recycle Bin" };
+            for (int i = 0; i < iconTexts.Length; i++)
+            {
+                var icon = new Border
+                {
+                    Width = 84, Height = 84, CornerRadius = new CornerRadius(8),
+                    Background = Brushes.Transparent,
+                    Child = new StackPanel
+                    {
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Children =
+                        {
+                            new TextBlock
+                            {
+                                Text = iconTexts[i],
+                                Foreground = Brushes.White,
+                                FontSize = 11,
+                                FontFamily = new FontFamily("Segoe UI"),
+                                HorizontalAlignment = HorizontalAlignment.Center,
+                                TextWrapping = TextWrapping.Wrap,
+                                TextAlignment = TextAlignment.Center,
+                                Effect = new System.Windows.Media.Effects.DropShadowEffect
+                                {
+                                    Color = Colors.Black,
+                                    BlurRadius = 4,
+                                    ShadowDepth = 1,
+                                    Opacity = 0.7
+                                }
+                            },
+                        },
+                    },
+                };
+                Canvas.SetLeft(icon, 20 + (i % 2) * 94);
+                Canvas.SetTop(icon, 20 + (i / 2) * 94);
+                _canvas.Children.Add(icon);
+            }
+
+            // Taskbar at bottom
+            var taskbar = new Border
+            {
+                Height = 48,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Background = new SolidColorBrush(Color.FromArgb(0xE0, 0x10, 0x10, 0x10)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(0, 1, 0, 0),
+                Width = Width,
+            };
+            var taskbarGrid = new Grid();
+            // Start button
+            var startBtn = new Border
+            {
+                Width = 48, Height = 32,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(8, 0, 0, 0),
+                Background = new SolidColorBrush(Color.FromArgb(0x60, 0xFF, 0xFF, 0xFF)),
+                CornerRadius = new CornerRadius(6),
+                Child = new TextBlock
+                {
+                    Text = "⊞", Foreground = Brushes.White, FontSize = 16,
+                    VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+                }
+            };
+            taskbarGrid.Children.Add(startBtn);
+
+            // Pinned apps
+            var pinnedApps = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(60, 0, 0, 0),
+            };
+            foreach (var emoji in new[] { "📂", "🌐", "💬", "📧" })
+            {
+                pinnedApps.Children.Add(new Border
+                {
+                    Width = 40, Height = 32, Margin = new Thickness(4, 0, 4, 0),
+                    Background = Brushes.Transparent, CornerRadius = new CornerRadius(6),
+                    Child = new TextBlock { Text = emoji, FontSize = 14, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center },
+                });
+            }
+            taskbarGrid.Children.Add(pinnedApps);
+
+            // System tray (right)
+            var systemTray = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 0, 16, 0),
+            };
+            foreach (var emoji in new[] { "🔊", "📶", "🔋" })
+            {
+                systemTray.Children.Add(new Border
+                {
+                    Width = 40, Height = 32, Margin = new Thickness(4, 0, 4, 0),
+                    Background = Brushes.Transparent, CornerRadius = new CornerRadius(6),
+                    Child = new TextBlock { Text = emoji, FontSize = 14, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center },
+                });
+            }
+            systemTray.Children.Add(new TextBlock
+            {
+                Text = DateTime.Now.ToString("HH:mm"),
+                Foreground = Brushes.White, FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0),
+            });
+            taskbarGrid.Children.Add(systemTray);
+
+            taskbar.Child = taskbarGrid;
+            _canvas.Children.Add(taskbar);
+            Canvas.SetLeft(taskbar, 0);
+            Canvas.SetTop(taskbar, Height - 48);
+
+            // File tiles (folder window)
             var window = new Border
             {
                 Width = 300, Height = 210, CornerRadius = new CornerRadius(10),
@@ -354,9 +472,7 @@ internal static class ReadmeMedia
             _wheel.ApplySettings(_settings);
             Canvas.SetLeft(_wheel, ReadmeMedia.Width / 2.0 - _wheel.Extent / 2);
             Canvas.SetTop(_wheel, ReadmeMedia.Height / 2.0 - _wheel.Extent / 2);
-            _canvas.Background = theme == AppTheme.Light
-                ? new LinearGradientBrush(Color.FromRgb(0xC9, 0xD6, 0xF2), Color.FromRgb(0xE9, 0xD8, 0xF0), 35)
-                : new LinearGradientBrush(Color.FromRgb(0x4B, 0x5F, 0xC9), Color.FromRgb(0x2A, 0x9D, 0x8F), 35);
+            // Keep the desktop wallpaper background (set by Backdrop); only update the wheel's theme.
         }
 
         public void Cursor(Point p)

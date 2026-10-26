@@ -61,9 +61,9 @@ A tray app that:
    files, opens Settings), so these never start a second copy.
 4. Runs the job in the background:
    - **Images** → PNG, JPG, BMP, GIF, TIFF (Windows Imaging Component), WebP (decoded by Windows,
-     encoded by FFmpeg's libwebp), PDF. **iPhone HEIC/HEIF photos and AVIF** are read too: by
-     Windows when it has the codec, otherwise by the bundled FFmpeg, so they work without buying
-     Microsoft's HEVC extension. Photos taken sideways come out the right way up.
+     encoded by FFmpeg's libwebp), PDF, **SVG** (via Svg.Skia). **iPhone HEIC/HEIF photos and AVIF**
+     are read too: by Windows when it has the codec, otherwise by the bundled FFmpeg, so they work
+     without buying Microsoft's HEVC extension. Photos taken sideways come out the right way up.
    - **Video** → MP4, WebM, MOV, GIF, MP3 (FFmpeg); reads iPhone HEVC and ProRes videos too
    - **Audio** → MP3, WAV, FLAC, OGG, M4A (FFmpeg); reads Apple's CAF, AIFF and Apple Lossless too
    - **Resize** (images and video): to a width × height, keeping the aspect ratio (fit inside) or

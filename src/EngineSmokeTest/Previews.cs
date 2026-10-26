@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using Circularity;
 using Circularity.Engine;
 
@@ -44,31 +45,86 @@ internal static class Previews
                 if (expanded && view.ArcOrder.Count > 0)
                     view.SetHot(view.ArcOrder[^1]);
 
-                var backdrop = new Grid
+                // Windows 11-like desktop backdrop: default blue wallpaper
+                var desktopBg = new Grid
+                {
+                    Width = 800,
+                    Height = 500,
+                };
+                // Windows 11 default blue wallpaper (#004D8D) with subtle gradient
+                desktopBg.Background = new LinearGradientBrush(
+                    Color.FromRgb(0x00, 0x4D, 0x8D),
+                    Color.FromRgb(0x00, 0x30, 0x60),
+                    90);
+
+                // A few desktop icons (top-left area) - simple text blocks
+                var iconsPanel = new StackPanel
+                {
+                    Orientation = Orientation.Vertical,
+                    Margin = new Thickness(20, 20, 0, 0),
+                };
+                foreach (var iconText in new[] { "📁  This PC", "📁  Documents", "🖼️  Photos", "📄  Recycle Bin" })
+                {
+                    var btn = new TextBlock
+                    {
+                        Text = iconText,
+                        Foreground = new SolidColorBrush(Colors.White),
+                        FontSize = 11,
+                        FontFamily = new FontFamily("Segoe UI"),
+                        Margin = new Thickness(0, 4, 0, 4),
+                        Effect = new System.Windows.Media.Effects.DropShadowEffect
+                        {
+                            Color = Colors.Black,
+                            BlurRadius = 4,
+                            ShadowDepth = 1,
+                            Opacity = 0.6
+                        }
+                    };
+                    iconsPanel.Children.Add(btn);
+                }
+                desktopBg.Children.Add(iconsPanel);
+
+                // Position the wheel near the center-bottom (where a drag might end up)
+                var wheelContainer = new Grid
                 {
                     Width = view.Extent,
                     Height = view.Extent,
-                    Background = new LinearGradientBrush(Color.FromRgb(0x5B, 0x7F, 0xD6), Color.FromRgb(0x2A, 0x9D, 0x8F), 45),
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 0, 0, 80), // Above taskbar area
                     Children = { view },
                 };
+                desktopBg.Children.Add(wheelContainer);
+
+                // Taskbar at bottom - simple border
+                var taskbar = new Border
+                {
+                    Height = 48,
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                    Background = new SolidColorBrush(Color.FromArgb(0xE0, 0x10, 0x10, 0x10)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+                    BorderThickness = new Thickness(0, 1, 0, 0),
+                };
+                desktopBg.Children.Add(taskbar);
+
                 // Hosted in a real (offscreen) window and given a moment, so the hover and open
                 // animations have finished by the time the snapshot is taken.
                 var host = new Window
                 {
-                    Content = backdrop, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None,
+                    Content = desktopBg, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None,
                     Left = -20000, Top = -20000, ShowActivated = false, ShowInTaskbar = false,
                 };
                 host.Show();
                 Settle(400);
-                Save(backdrop, Path.Combine(folder, name + ".png"));
+                Save(desktopBg, System.IO.Path.Combine(folder, name + ".png"));
                 host.Close();
             }
 
-            var sample = new[] { Path.Combine(Path.GetTempPath(), "holiday.png") };
+            var sample = new[] { System.IO.Path.Combine(System.IO.Path.GetTempPath(), "holiday.png") };
             File.WriteAllBytes(sample[0], new byte[2_400_000]); // Only its name and size are shown.
             var gradient = new DrawingVisual();
             using (var dc = gradient.RenderOpen())
-                dc.DrawRectangle(new LinearGradientBrush(Colors.SkyBlue, Colors.DarkOrange, 30), null, new Rect(0, 0, 900, 600));
+                dc.DrawRectangle(new LinearGradientBrush(Colors.SkyBlue, Colors.DarkOrange, 30), null, new System.Windows.Rect(0, 0, 900, 600));
             var picture = new RenderTargetBitmap(900, 600, 96, 96, PixelFormats.Pbgra32);
             picture.Render(gradient);
 
@@ -96,7 +152,7 @@ internal static class Previews
                 ("compress-video", _ => new VideoCompressDialog(sample, new MediaInfo(TimeSpan.FromSeconds(151), 1920, 1080, 30, 12_000_000, true))),
                 ("compress-pdf", _ => new PdfCompressDialog(sample)),
                 ("trim", _ => new TrimDialog("holiday.mp4", TimeSpan.FromSeconds(151.4), null,
-                    _ => System.Threading.Tasks.Task.FromResult<ImageSource?>(picture))),
+                    _ => System.Threading.Tasks.Task.FromResult<System.Windows.Media.ImageSource?>(picture))),
                 ("crop", _ => new CropWindow(picture, "holiday.png", 1, 2)),
             };
             foreach (var theme in new[] { AppTheme.Dark, AppTheme.Light })
@@ -118,7 +174,7 @@ internal static class Previews
                         Settle(600); // The cut-point previews load after a short pause.
                     // The window's own backdrop (Mica) isn't part of its content, so paint a plain one behind it.
                     var backdrop = theme == AppTheme.Dark ? Color.FromRgb(0x20, 0x20, 0x20) : Color.FromRgb(0xF3, 0xF3, 0xF3);
-                    Save((FrameworkElement)window.Content, Path.Combine(folder, $"{name}-{theme.ToString().ToLowerInvariant()}.png"),
+                    Save((FrameworkElement)window.Content, System.IO.Path.Combine(folder, $"{name}-{theme.ToString().ToLowerInvariant()}.png"),
                         new SolidColorBrush(backdrop));
                     window.Close();
                 }
