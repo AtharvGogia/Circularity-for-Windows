@@ -137,6 +137,8 @@ internal static class ReadmeMedia
             s.HideDragGhost();
             s.HideWheel();
         }
+        if (t >= DropAt + 0.4 && s.Once("saved"))
+            s.AddFile("holiday.gif");
         if (t >= DropAt + 0.5 && s.Once("toast"))
             s.Toast("holiday.gif is ready", "Converted holiday.jpg to GIF. Select to show it in File Explorer.");
         return DropAt + 2.6;
@@ -178,6 +180,8 @@ internal static class ReadmeMedia
             s.Keys("Enter");
             s.HideWheel();
         }
+        if (t >= 5.1 && s.Once("saved"))
+            s.AddFile("report.txt");
         if (t >= 5.2 && s.Once("toast"))
             s.Toast("report.txt is ready", "Converted report.pdf to TXT. Select to show it in File Explorer.");
         return 7.4;
@@ -257,6 +261,9 @@ internal static class ReadmeMedia
         private Rectangle? _wallpaper, _wallpaperNext;
         private Border? _taskbar;
         private AppTheme _desktopTheme = AppTheme.Dark;
+        private Canvas? _explorer;
+        private Point _explorerAt, _filesAt;
+        private TextBlock? _status;
 
         public double Time { get; private set; }
 
@@ -559,20 +566,15 @@ internal static class ReadmeMedia
 
             // The files, as large thumbnails.
             Add(window, new Border { Width = W - NavWidth, Height = bodyHeight, Background = Brush(0xFF191919) }, NavWidth, bodyTop);
-            for (int i = 0; i < files.Length; i++)
-            {
-                double tx = NavWidth + 18 + (i % 3) * 124, ty = bodyTop + 14 + (i / 3) * 128;
-                var tile = Tile(files[i]);
-                Add(window, tile, tx, ty);
-                _tiles.Add((tile, new Point(X + tx + 56, Y + ty + 46)));
-            }
+            _explorer = window;
+            _explorerAt = new Point(X, Y);
+            _filesAt = new Point(NavWidth, bodyTop);
+            foreach (string file in files)
+                AddTile(file);
 
             // Status bar.
-            Add(window, new Border
-            {
-                Width = W, Height = StatusRow, Background = Brush(0xFF1C1C1C),
-                Child = WithMargin(Text($"{files.Length} items", 11.5, 0xB0FFFFFF), new Thickness(12, 0, 0, 0)),
-            }, 0, H - StatusRow);
+            _status = WithMargin(Text($"{files.Length} items", 11.5, 0xB0FFFFFF), new Thickness(12, 0, 0, 0));
+            Add(window, new Border { Width = W, Height = StatusRow, Background = Brush(0xFF1C1C1C), Child = _status }, 0, H - StatusRow);
 
             var frame = new Border
             {
@@ -664,7 +666,7 @@ internal static class ReadmeMedia
                             dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0xC9, 0xCF, 0xD8)), null, new Rect(28, 12 + line * 7, line % 3 == 2 ? 20 : 32, 2.5));
                         var badge = pdf ? Color.FromRgb(0xD9, 0x30, 0x25) : Color.FromRgb(0x3B, 0x82, 0xF6);
                         dc.DrawRoundedRectangle(new SolidColorBrush(badge), null, new Rect(14, 44, 32, 14), 2, 2);
-                        var label = new FormattedText(pdf ? "PDF" : "MD", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                        var label = new FormattedText(Path.GetExtension(name).TrimStart('.').ToUpperInvariant(), System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
                             new Typeface(Ui, FontStyles.Normal, FontWeights.Bold, FontStretches.Normal), 9, Brushes.White, 1.0);
                         dc.DrawText(label, new Point(30 - label.Width / 2, 45.5));
                         break;
@@ -675,6 +677,33 @@ internal static class ReadmeMedia
             bitmap.Render(visual);
             bitmap.Freeze();
             return bitmap;
+        }
+
+        /// <summary>Puts a file in the next spot of Explorer's grid (three across).</summary>
+        private Border AddTile(string file)
+        {
+            int i = _tiles.Count;
+            double tx = _filesAt.X + 18 + (i % 3) * 124, ty = _filesAt.Y + 14 + (i / 3) * 128;
+            var tile = Tile(file);
+            Add(_explorer!, tile, tx, ty);
+            _tiles.Add((tile, new Point(_explorerAt.X + tx + 56, _explorerAt.Y + ty + 46)));
+            return tile;
+        }
+
+        /// <summary>A converted file turning up in the open folder, as it does in Explorer, with the item count going up.</summary>
+        public void AddFile(string file)
+        {
+            var tile = AddTile(file);
+            tile.Opacity = 0;
+            tile.RenderTransformOrigin = new Point(0.5, 0.5);
+            tile.RenderTransform = new ScaleTransform(0.9, 0.9);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            tile.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
+            var grow = new DoubleAnimation(0.9, 1, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease };
+            ((ScaleTransform)tile.RenderTransform).BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+            ((ScaleTransform)tile.RenderTransform).BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+            if (_status != null)
+                _status.Text = $"{_tiles.Count} items";
         }
 
         public Point TileCenter(int index) => _tiles[index].Center;
