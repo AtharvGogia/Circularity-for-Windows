@@ -37,7 +37,6 @@ internal static class Glyphs
     public const string Pdf = "";
     public const string Document = "";
     public const string Web = "";
-    public const string Svg = ""; // same as photo for now
     public const string Resize = "";
     public const string Crop = "";
     public const string Compress = "";

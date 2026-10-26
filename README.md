@@ -61,9 +61,13 @@ A tray app that:
    files, opens Settings), so these never start a second copy.
 4. Runs the job in the background:
    - **Images** → PNG, JPG, BMP, GIF, TIFF (Windows Imaging Component), WebP (decoded by Windows,
-     encoded by FFmpeg's libwebp), PDF, **SVG** (via Svg.Skia). **iPhone HEIC/HEIF photos and AVIF**
-     are read too: by Windows when it has the codec, otherwise by the bundled FFmpeg, so they work
-     without buying Microsoft's HEVC extension. Photos taken sideways come out the right way up.
+     encoded by FFmpeg's libwebp), PDF. **iPhone HEIC/HEIF photos and AVIF** are read too: by
+     Windows when it has the codec, otherwise by the bundled FFmpeg, so they work without buying
+     Microsoft's HEVC extension. Photos taken sideways come out the right way up.
+     **SVG** files are read and drawn with Svg.Skia, keeping transparency. Being vector, small ones
+     (icons) come out at 1024 px rather than at their tiny nominal size, and huge ones at most
+     4096 px. Anything an SVG links to outside itself (web pictures, fonts, styles, other files) is
+     ignored, so converting one never contacts a server.
    - **Video** → MP4, WebM, MOV, GIF, MP3 (FFmpeg); reads iPhone HEVC and ProRes videos too
    - **Audio** → MP3, WAV, FLAC, OGG, M4A (FFmpeg); reads Apple's CAF, AIFF and Apple Lossless too
    - **Resize** (images and video): to a width × height, keeping the aspect ratio (fit inside) or
@@ -151,7 +155,7 @@ It produces, in `artifacts\`:
 
 | Output | What it is | Size |
 | --- | --- | --- |
-| `artifacts\CircularitySetup-0.3.3.exe` | The installer to hand out | ~67 MB |
+| `artifacts\CircularitySetup-0.3.4.exe` | The installer to hand out | ~67 MB |
 | `artifacts\Circularity\Circularity.exe` | The app itself, in a self-contained folder that also runs without installing (e.g. from a USB stick) | ~222 MB folder |
 
 The installer:
@@ -312,7 +316,7 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 The in-app updater looks at this repository's latest GitHub release, so a release must:
 
 1. be tagged with the version, e.g. `v0.3.0` (matching `<Version>` in `src/Circularity/Circularity.csproj`), and
-2. have the installer from `build\build.ps1`, `CircularitySetup-0.3.3.exe`, attached as an asset.
+2. have the installer from `build\build.ps1`, `CircularitySetup-0.3.4.exe`, attached as an asset.
 
 Whatever is written in the release's description is shown in the update window as "what's new".
 The repository has to be public for the updater to see releases.
@@ -331,7 +335,9 @@ Everything bundled was chosen so that Circularity itself can stay under the MIT 
   The Gyan "full" FFmpeg suggested for development *is* GPL, so it's fine on your own PC but must
   not be shipped.
 - **PdfPig** (Apache-2.0), **Markdig** (BSD-2-Clause), **PDFium** (BSD-3-Clause / Apache-2.0, plus
-  permissive licences for what it bundles) and the **WebView2** SDK (Microsoft's redistributable
-  licence) all allow use in an MIT project.
+  permissive licences for what it bundles), **Svg.Skia** and **SkiaSharp** (MIT, with Skia under
+  BSD-3-Clause), the SVG library behind them (Ms-PL) and the **WebView2** SDK (Microsoft's
+  redistributable licence) all allow use in an MIT project. Where a bundled library offers a choice
+  of licences (FreeType, for instance), it's used under the non-GPL one.
 - **PDFsharp** was deliberately not used: from version 6.5 it's AGPL, which would require
   Circularity to be released under the AGPL instead of MIT.

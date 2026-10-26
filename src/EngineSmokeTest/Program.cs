@@ -117,6 +117,13 @@ internal static class Program
             await DocumentChecks(queue, dir, image);
             await AppleFormatChecks(queue, ffmpeg.FfmpegPath, dir);
             await CompressAndTrimChecks(queue, ffmpeg, dir, longVideo, audio, photo);
+            await SvgChecks(queue, dir);
+
+            // The updater reads release tags with three or four numbers, and orders them properly.
+            Version Tag(string tag) => UpdateChecker.TryParseVersion(tag, out var v) ? v : new Version(0, 0, 0, 0);
+            Check("updater: v0.3.3.1 is newer than v0.3.3, v0.3.3 equals 0.3.3.0, v0.3.4 is newer still",
+                Tag("v0.3.3.1") > Tag("v0.3.3") && Tag("v0.3.3") == new Version(0, 3, 3, 0) && Tag("v0.3.4") > Tag("v0.3.3.1") && Tag("0.3.3.1.5") == new Version(0, 0, 0, 0),
+                $"{Tag("v0.3.3.1")}, {Tag("v0.3.3")}, {Tag("v0.3.4")}");
 
             // 5. A multi-file batch reports once, with every job finished.
             {
@@ -528,6 +535,90 @@ internal static class Program
         Check("audio gets Trim", Tools("a.mp3") == "Trim", Tools("a.mp3"));
         Check("PDFs get Compress, Word files don't", Tools("a.pdf") == "Compress" && !Tools("a.docx").Contains("Compress"), $"pdf: {Tools("a.pdf")}; docx: {Tools("a.docx")}");
         Check("a mix of photos and videos gets neither", !Tools("a.jpg", "b.mp4").Contains("Compress") && !Tools("a.jpg", "b.mp4").Contains("Trim"), Tools("a.jpg", "b.mp4"));
+    }
+
+    /// <summary>
+    /// SVGs: drawn at a useful size with their colours and transparency, edited into PNGs, refused
+    /// clearly when broken, and never fetching anything they link to (a web address served here).
+    /// </summary>
+    private static async Task SvgChecks(ConversionQueue queue, string dir)
+    {
+        async Task<ConversionJob> Do(string file, Operation operation) => (await Run(queue, new[] { file }, operation)).Jobs[0];
+        string Name(ConversionJob job) => job.State == JobState.Succeeded ? Path.GetFileName(job.OutputPath)! : $"{job.State}: {job.Error}";
+        System.Windows.Media.Color PixelAt(string png, int x, int y)
+        {
+            var image = new System.Windows.Media.Imaging.FormatConvertedBitmap(ImageConverter.LoadOriented(png), System.Windows.Media.PixelFormats.Bgra32, null, 0);
+            var pixel = new byte[4];
+            image.CopyPixels(new System.Windows.Int32Rect(x, y, 1, 1), pixel, 4, 0);
+            return System.Windows.Media.Color.FromArgb(pixel[3], pixel[2], pixel[1], pixel[0]);
+        }
+
+        // A 600 × 300 logo: orange on the left, blue on the right.
+        string logo = Path.Combine(dir, "logo.svg");
+        File.WriteAllText(logo, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"600\" height=\"300\" viewBox=\"0 0 600 300\">" +
+            "<rect width=\"300\" height=\"300\" fill=\"#ff8a1e\"/><rect x=\"300\" width=\"300\" height=\"300\" fill=\"#3b82f6\"/></svg>");
+        var logoPng = await Do(logo, new ConvertTo("png"));
+        bool logoOk = logoPng.State == JobState.Succeeded && ImageConverter.ReadSize(logoPng.OutputPath!) == (600, 300);
+        Check("svg -> png at its own size, colours right",
+            logoOk && PixelAt(logoPng.OutputPath!, 50, 150) is { R: > 240, B: < 60 } && PixelAt(logoPng.OutputPath!, 550, 150) is { B: > 230, R: < 80 },
+            logoPng.State == JobState.Succeeded ? $"{ImageConverter.ReadSize(logoPng.OutputPath!)}" : Name(logoPng));
+
+        // A 24 px icon: drawn at 1024 px, and the area around the shape stays see-through.
+        string icon = Path.Combine(dir, "star.svg");
+        File.WriteAllText(icon, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\">" +
+            "<circle cx=\"12\" cy=\"12\" r=\"8\" fill=\"#222\"/></svg>");
+        var iconPng = await Do(icon, new ConvertTo("png"));
+        bool iconOk = iconPng.State == JobState.Succeeded && ImageConverter.ReadSize(iconPng.OutputPath!) == (1024, 1024);
+        Check("small svg is drawn at 1024 px, transparent around it",
+            iconOk && PixelAt(iconPng.OutputPath!, 10, 10).A == 0 && PixelAt(iconPng.OutputPath!, 512, 512) is { A: 255, R: < 60 },
+            iconPng.State == JobState.Succeeded ? $"{ImageConverter.ReadSize(iconPng.OutputPath!)}" : Name(iconPng));
+
+        var resized = await Do(icon, new ResizeTo(new ResizeSpec(ResizeKind.Fit, 256, 256)));
+        Check("resizing an svg gives a png (keeps transparency)", resized.State == JobState.Succeeded && resized.OutputPath!.EndsWith(".png"), Name(resized));
+
+        string broken = Path.Combine(dir, "broken.svg");
+        File.WriteAllText(broken, "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=");
+        var brokenPng = await Do(broken, new ConvertTo("png"));
+        Check("broken svg fails with a readable message", brokenPng.State == JobState.Failed && brokenPng.Error!.Contains("isn't a valid SVG"), $"{brokenPng.State}: {brokenPng.Error}");
+
+        // An SVG linking to a picture, a style and a pattern on a web address that this test serves: none
+        // of them may be fetched, and the SVG still converts.
+        using var listener = new System.Net.HttpListener();
+        int port = new Random().Next(40000, 60000);
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+        int requests = 0;
+        _ = Task.Run(async () =>
+        {
+            while (listener.IsListening)
+            {
+                try
+                {
+                    var context = await listener.GetContextAsync();
+                    Interlocked.Increment(ref requests);
+                    context.Response.StatusCode = 404;
+                    context.Response.Close();
+                }
+                catch (Exception)
+                {
+                    return; // Stopped.
+                }
+            }
+        });
+        string tracker = Path.Combine(dir, "tracker.svg");
+        string site = $"http://127.0.0.1:{port}";
+        File.WriteAllText(tracker, "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"200\" height=\"100\">" +
+            $"<style>@import url({site}/a.css); .x {{ fill: url({site}/p.svg#g) }}</style>" +
+            $"<rect width=\"200\" height=\"100\" fill=\"#3b82f6\"/><rect class=\"x\" width=\"20\" height=\"20\"/>" +
+            $"<image width=\"100\" height=\"100\" xlink:href=\"{site}/tracker.png\"/><image width=\"100\" height=\"100\" href=\"{site}/other.png\"/></svg>");
+        var trackerPng = await Do(tracker, new ConvertTo("png"));
+        await Task.Delay(500);
+        listener.Stop();
+        Check("svg links to the web are never fetched", trackerPng.State == JobState.Succeeded && requests == 0,
+            $"{Name(trackerPng)}, {requests} request(s) made");
+
+        var svgButtons = Formats.ActionsFor(new[] { "logo.svg" }, queue.CanHandle).Actions.Select(a => a.Label).ToList();
+        Check("svg offers PNG and PDF, never SVG", svgButtons.Contains("PNG") && svgButtons.Contains("PDF") && !svgButtons.Contains("SVG"), string.Join(" ", svgButtons));
     }
 
     /// <summary>Average difference per colour channel between two same-sized pictures, 0 to 255.</summary>

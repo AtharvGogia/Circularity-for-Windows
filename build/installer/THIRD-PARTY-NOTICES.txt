@@ -51,6 +51,24 @@ PDFium (pdfium.dll), used to turn PDF pages into images
     fast_float, simdutf       MIT licence
     Anti-Grain Geometry 2.3   AGG licence (permission to copy and use)
 
+Svg.Skia (SVG drawing), with Svg.Model, Svg.Animation, Svg.SceneGraph and ShimSkiaSharp
+  Licence: MIT (licenses\Svg.Skia-MIT.txt)
+  https://github.com/wieslawsoltes/Svg.Skia
+  Svg.Custom, its build of the SVG library (svg-net)
+  Licence: Microsoft Public License (licenses\Svg.Custom-MS-PL.txt)
+  https://github.com/svg-net/SVG
+  ExCSS (CSS parsing for SVG styles)
+  Licence: MIT (licenses\ExCSS-MIT.txt)
+  https://github.com/TylerBrinks/ExCSS
+
+SkiaSharp and HarfBuzzSharp (libSkiaSharp.dll, libHarfBuzzSharp.dll)
+  Licence: MIT (licenses\SkiaSharp-MIT.txt, licenses\HarfBuzzSharp-MIT.txt)
+  https://github.com/mono/SkiaSharp
+  They include Google's Skia graphics engine (BSD 3-Clause) and the libraries it builds with,
+  such as libpng, libjpeg-turbo, libwebp, zlib, FreeType (used under the FreeType Licence) and
+  HarfBuzz. Their notices are in licenses\SkiaSharp-ThirdPartyNotices.txt. Where a library there
+  offers a choice of licences, Circularity uses it under the non-GPL option.
+
 Markdig
   Licence: BSD 2-Clause (licenses\Markdig-BSD-2-Clause.txt)
   https://github.com/xoofx/markdig

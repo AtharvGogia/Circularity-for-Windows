@@ -36,7 +36,7 @@ internal partial class UpdateWindow : Window
             if (_update == null)
             {
                 Heading.Text = "No releases yet";
-                Detail.Text = $"You have Circularity {UpdateChecker.CurrentVersion}. Nothing has been published on GitHub yet.";
+                Detail.Text = $"You have Circularity {Diagnostics.AppVersion()}. Nothing has been published on GitHub yet.";
                 return;
             }
 
@@ -44,12 +44,12 @@ internal partial class UpdateWindow : Window
             if (!_update.IsNewer)
             {
                 Heading.Text = "You're up to date";
-                Detail.Text = $"Circularity {UpdateChecker.CurrentVersion} is the latest version.";
+                Detail.Text = $"Circularity {Diagnostics.AppVersion()} is the latest version.";
                 return;
             }
 
-            Heading.Text = $"Circularity {_update.Version} is available";
-            Detail.Text = $"You have {UpdateChecker.CurrentVersion}.";
+            Heading.Text = $"Circularity {_update.Tag.TrimStart('v')} is available";
+            Detail.Text = $"You have {Diagnostics.AppVersion()}.";
             if (_update.Notes.Length > 0)
             {
                 Notes.Text = _update.Notes;
@@ -76,7 +76,7 @@ internal partial class UpdateWindow : Window
         if (_update == null)
             return;
         InstallButton.IsEnabled = false;
-        Heading.Text = $"Downloading Circularity {_update.Version}…";
+        Heading.Text = $"Downloading Circularity {_update.Tag.TrimStart('v')}…";
         Progress.Visibility = Visibility.Visible;
         Progress.IsIndeterminate = false;
         Progress.Value = 0;
@@ -84,7 +84,7 @@ internal partial class UpdateWindow : Window
         {
             var progress = new Progress<double>(value => Progress.Value = value * 100);
             string installer = await _checker.DownloadInstallerAsync(_update, progress, _cancel.Token);
-            Log.Write($"Installing update {_update.Version} from {installer}.");
+            Log.Write($"Installing update {_update.Tag.TrimStart('v')} from {installer}.");
             Heading.Text = "Installing…";
             UpdateChecker.StartInstaller(installer);
             InstallerStarted?.Invoke();

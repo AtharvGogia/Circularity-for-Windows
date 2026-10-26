@@ -95,7 +95,12 @@ internal static class Diagnostics
     public static string AppVersion()
     {
         var version = typeof(Diagnostics).Assembly.GetName().Version;
-        return version is { Build: > 0 } ? $"{version.Major}.{version.Minor}.{version.Build}" : $"{version?.Major}.{version?.Minor}";
+        return version switch
+        {
+            { Revision: > 0 } => $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}",
+            { Build: > 0 } => $"{version.Major}.{version.Minor}.{version.Build}",
+            _ => $"{version?.Major}.{version?.Minor}",
+        };
     }
 
     private static string WindowsVersion()

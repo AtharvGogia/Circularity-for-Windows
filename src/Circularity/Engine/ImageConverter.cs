@@ -14,8 +14,8 @@ namespace Circularity.Engine;
 
 /// <summary>
 /// Image conversion, resizing, cropping and compression using the Windows Imaging Component (via WPF).
-/// Reads anything WIC has a codec for, and anything else FFmpeg can read (HEIC on PCs without the HEVC
-/// extension, AVIF without the AV1 one); writes PNG, JPG, BMP, GIF and TIFF itself, and WebP by
+/// Reads anything WIC has a codec for, SVG (drawn with Svg.Skia), and anything else FFmpeg can read
+/// (HEIC on PCs without the HEVC extension, AVIF without the AV1 one); writes PNG, JPG, BMP, GIF and TIFF itself, and WebP by
 /// handing a PNG to FFmpeg (libwebp) when it has that encoder.
 /// </summary>
 internal sealed class ImageConverter : IConverter
@@ -61,11 +61,12 @@ internal sealed class ImageConverter : IConverter
         if (operation is CompressTo)
             return "jpg";
 
-        // Edits keep the format when it can be written. HEIC can only be read, so it becomes JPG.
+        // Edits keep the format when it can be written. HEIC can only be read, so it becomes JPG; icons
+        // and SVGs become PNG, since they're usually see-through in places and JPG can't be.
         string ext = Formats.NormalizedExtension(inputPath);
         if (Writable.Contains(ext) || (ext == "webp" && CanWriteWebp))
             return ext;
-        return ext == "ico" ? "png" : "jpg";
+        return ext is "ico" or "svg" ? "png" : "jpg";
     }
 
     public async Task<string> RunAsync(string inputPath, Operation operation, string outputPath, IProgress<double> progress, CancellationToken cancellationToken)
@@ -171,49 +172,82 @@ internal sealed class ImageConverter : IConverter
     private static bool IsUnreadable(Exception ex) =>
         ex is NotSupportedException or FileFormatException or System.Runtime.InteropServices.COMException or ArgumentException or OverflowException;
 
-    /// <summary>Loads an SVG file via Svg.Skia and returns a frozen BitmapSource.</summary>
+    /// <summary>SVGs smaller than this (on their longest side) are drawn bigger; icons are often 16 or 24 px.</summary>
+    private const int SvgSmall = 512;
+
+    /// <summary>The size small SVGs are drawn at, and the most any SVG is drawn at.</summary>
+    private const int SvgSmallTarget = 1024, SvgLargest = 4096;
+
+    /// <summary>
+    /// Draws an SVG (with Svg.Skia) into a frozen bitmap. Being vector, it can be drawn at any size, so
+    /// a small one (an icon, say) comes out at 1024 px instead of a useless 24 px, and a huge one is
+    /// capped at 4096 px. Transparent areas stay transparent.
+    /// </summary>
     private static BitmapSource LoadSvg(string path)
     {
-        using var stream = File.OpenRead(path);
-        var svg = new SKSvg();
-        svg.Load(stream);
+        using var svg = OpenSvg(path, out var bounds);
+        var (width, height) = SvgOutputSize(bounds);
+        float scale = width / bounds.Width;
 
-        // Get the SVG's natural size
-        var picture = svg.Picture;
-        if (picture == null)
-            throw new InvalidOperationException($"Couldn't parse SVG: {Path.GetFileName(path)}");
-
-        var bounds = picture.CullRect;
-        if (bounds.Width <= 0 || bounds.Height <= 0)
-        {
-            // Default to a reasonable size if no dimensions found
-            bounds = new SKRect(0, 0, 100, 100);
-        }
-
-        // Render to a bitmap at a reasonable DPI (96 DPI)
-        // We'll scale to at most 2048px on the longest side to avoid huge memory usage
-        const int maxDimension = 2048;
-        float scale = Math.Min(1f, maxDimension / Math.Max(bounds.Width, bounds.Height));
-        int width = (int)Math.Round(bounds.Width * scale);
-        int height = (int)Math.Round(bounds.Height * scale);
-
-        using var surface = SKSurface.Create(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul));
+        var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var surface = SKSurface.Create(info)
+            ?? throw new InvalidOperationException($"{Path.GetFileName(path)} is too large to draw.");
         var canvas = surface.Canvas;
         canvas.Clear(SKColors.Transparent);
         canvas.Scale(scale);
-        canvas.DrawPicture(picture);
+        canvas.Translate(-bounds.Left, -bounds.Top);
+        canvas.DrawPicture(svg.Picture);
 
-        using var image = surface.Snapshot();
-        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-        using var memoryStream = new MemoryStream(data.ToArray());
-
-        var bitmap = new BitmapImage();
-        bitmap.BeginInit();
-        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-        bitmap.StreamSource = memoryStream;
-        bitmap.EndInit();
+        // Straight from Skia's pixels into WPF's: the same premultiplied BGRA layout.
+        var pixels = new byte[info.RowBytes * height];
+        var handle = System.Runtime.InteropServices.GCHandle.Alloc(pixels, System.Runtime.InteropServices.GCHandleType.Pinned);
+        try
+        {
+            if (!surface.ReadPixels(info, handle.AddrOfPinnedObject(), info.RowBytes, 0, 0))
+                throw new InvalidOperationException($"Couldn't draw {Path.GetFileName(path)}.");
+        }
+        finally
+        {
+            handle.Free();
+        }
+        var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Pbgra32, null, pixels, info.RowBytes);
         bitmap.Freeze();
         return bitmap;
+    }
+
+    /// <summary>Parses an SVG; throws with a readable message if it isn't one Svg.Skia can draw.</summary>
+    private static SKSvg OpenSvg(string path, out SKRect bounds)
+    {
+        var svg = new SKSvg();
+        try
+        {
+            // Cleaned first, so drawing it never fetches anything from outside the file (see SvgSafety).
+            using var stream = SvgSafety.Clean(path);
+            svg.Load(stream);
+        }
+        catch (Exception ex) when (ex is not IOException and not UnauthorizedAccessException)
+        {
+            svg.Dispose();
+            throw new InvalidOperationException($"Couldn't read {Path.GetFileName(path)}: it isn't a valid SVG.", ex);
+        }
+        if (svg.Picture is not { } picture)
+        {
+            svg.Dispose();
+            throw new InvalidOperationException($"Couldn't read {Path.GetFileName(path)}: it isn't a valid SVG.");
+        }
+        bounds = picture.CullRect;
+        // No size or viewBox at all: SVG's own default of 300 × 150.
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+            bounds = new SKRect(0, 0, 300, 150);
+        return svg;
+    }
+
+    /// <summary>The pixel size an SVG is drawn at (see <see cref="LoadSvg"/>).</summary>
+    private static (int Width, int Height) SvgOutputSize(SKRect bounds)
+    {
+        float longest = Math.Max(bounds.Width, bounds.Height);
+        float scale = longest < SvgSmall ? SvgSmallTarget / longest : Math.Min(1f, SvgLargest / longest);
+        return (Math.Max(1, (int)Math.Round(bounds.Width * scale)), Math.Max(1, (int)Math.Round(bounds.Height * scale)));
     }
 
     /// <summary>Upright pixel size, read from the file header without decoding the whole image when Windows can.</summary>
@@ -242,22 +276,11 @@ internal sealed class ImageConverter : IConverter
         return (image.PixelWidth, image.PixelHeight);
     }
 
-    /// <summary>Reads SVG dimensions via Svg.Skia without rasterizing the whole image.</summary>
+    /// <summary>The size an SVG converts at, which is what the Resize window shows as its current size.</summary>
     private static (int Width, int Height) ReadSvgSize(string path)
     {
-        using var stream = File.OpenRead(path);
-        var svg = new SKSvg();
-        svg.Load(stream);
-
-        var picture = svg.Picture;
-        if (picture == null)
-            throw new InvalidOperationException($"Couldn't parse SVG: {Path.GetFileName(path)}");
-
-        var bounds = picture.CullRect;
-        if (bounds.Width <= 0 || bounds.Height <= 0)
-            bounds = new SKRect(0, 0, 100, 100);
-
-        return ((int)Math.Ceiling(bounds.Width), (int)Math.Ceiling(bounds.Height));
+        using var svg = OpenSvg(path, out var bounds);
+        return SvgOutputSize(bounds);
     }
 
     private static BitmapSource Resize(BitmapSource image, (int Width, int Height) size)

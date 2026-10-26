@@ -31,7 +31,7 @@
     <Copyright>© 2026 Atharv Gogia</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/AtharvGogia/Circularity-for-Windows</RepositoryUrl>
-    <Version>0.3.3</Version>
+    <Version>0.3.4</Version>
     <!-- Keep the version plain (e.g. "0.2.0") instead of appending the git commit id. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
@@ -47,7 +47,7 @@
     <!-- PDFium (the PDF engine in Chrome), prebuilt: renders PDF pages to images on the CPU. -->
     <PackageReference Include="bblanchon.PDFium.Win32" Version="157.0.8086" />
     <!-- SVG rendering via SkiaSharp -->
-    <PackageReference Include="Svg.Skia" Version="1.0.0" />
+    <PackageReference Include="Svg.Skia" Version="5.2.3" />
   </ItemGroup>
 
 </Project>

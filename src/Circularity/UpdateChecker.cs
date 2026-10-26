@@ -37,13 +37,13 @@ internal sealed partial class UpdateChecker
         _latestReleaseUrl = latestReleaseUrl ?? $"https://api.github.com/repos/{Repository}/releases/latest";
     }
 
-    /// <summary>This build's version, as major.minor.patch.</summary>
+    /// <summary>This build's version: major.minor.patch, plus a fourth number for a small follow-up release (0.3.3.1).</summary>
     public static Version CurrentVersion
     {
         get
         {
             var v = typeof(UpdateChecker).Assembly.GetName().Version ?? new Version(0, 0, 0);
-            return new Version(v.Major, v.Minor, Math.Max(0, v.Build));
+            return new Version(v.Major, v.Minor, Math.Max(0, v.Build), Math.Max(0, v.Revision));
         }
     }
 
@@ -141,9 +141,9 @@ internal sealed partial class UpdateChecker
     public static bool TryParseVersion(string tag, out Version version)
     {
         var match = VersionTag().Match(tag);
-        version = match.Success
-            ? new Version(int.Parse(match.Groups[1].Value), int.Parse(match.Groups[2].Value), match.Groups[3].Success ? int.Parse(match.Groups[3].Value) : 0)
-            : new Version(0, 0, 0);
+        // Always four numbers, so "v0.3.3" and "v0.3.3.0" compare as equal and "v0.3.3.1" as newer.
+        int Part(int group) => match.Groups[group].Success ? int.Parse(match.Groups[group].Value) : 0;
+        version = match.Success ? new Version(Part(1), Part(2), Part(3), Part(4)) : new Version(0, 0, 0, 0);
         return match.Success;
     }
 
@@ -155,7 +155,7 @@ internal sealed partial class UpdateChecker
         return client;
     }
 
-    [GeneratedRegex(@"^v?(\d+)\.(\d+)(?:\.(\d+))?$")]
+    [GeneratedRegex(@"^v?(\d+)\.(\d+)(?:\.(\d+))?(?:\.(\d+))?$")]
     private static partial Regex VersionTag();
 
     [GeneratedRegex(@"^CircularitySetup-.*\.exe$", RegexOptions.IgnoreCase)]
