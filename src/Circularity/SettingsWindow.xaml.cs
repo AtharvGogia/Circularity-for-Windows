@@ -169,7 +169,12 @@ internal partial class SettingsWindow : Window
     private void RefreshButtons()
     {
         var (label, actions) = Formats.ActionsFor(new[] { _sample }, _canHandle, _settings);
-        _preview.SetActions(actions, label);
+        // The sample isn't a real file, so it gets a typical size to show what the wheel's centre says.
+        string size = _kind switch { FileKind.Image => "3.1 MB", FileKind.Video => "48 MB", FileKind.Audio => "7.2 MB", _ => "220 KB" };
+        if (actions.Length > 0)
+            _preview.SetActions(actions, _sample, size);
+        else
+            _preview.SetActions(actions, label);
         BuildButtonList(actions);
     }
 

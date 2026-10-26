@@ -30,7 +30,7 @@ internal partial class WelcomeWindow : Window
         var small = settings.Clone();
         small.WheelSize = 240;
         _demo.ApplySettings(small);
-        _demo.SetActions(DemoActions, "Image");
+        _demo.SetActions(DemoActions, "holiday.jpg", "3.4 MB");
         DemoHost.Content = _demo;
 
         // Light up each button in turn, like a cursor moving around the wheel.

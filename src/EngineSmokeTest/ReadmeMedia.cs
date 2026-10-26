@@ -298,8 +298,10 @@ internal static class ReadmeMedia
 
         public void WheelFor(string file)
         {
-            var (label, actions) = Formats.ActionsFor(new[] { file }, (_, _) => true);
-            _wheel.SetActions(actions, label);
+            var (_, actions) = Formats.ActionsFor(new[] { file }, (_, _) => true);
+            // The demo files aren't real, so they get typical sizes for the wheel's centre.
+            string size = Formats.KindOf(file) switch { FileKind.Image => "3.4 MB", FileKind.Video => "48 MB", _ => "1.2 MB" };
+            _wheel.SetActions(actions, file, size);
             if (!_canvas.Children.Contains(_wheel))
                 Place(_wheel, 0, 0);
         }

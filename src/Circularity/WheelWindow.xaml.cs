@@ -157,7 +157,8 @@ internal partial class WheelWindow : Window
         // Decided before the wheel is kept on screen, so near the bottom edge it flips rather than
         // being pushed a long way up from the cursor to make room for the arc.
         _view.ArcAbove = ArcShouldOpenAbove(x, y);
-        _view.SetActions(actions, label);
+        var (centerLabel, centerDetail) = Formats.CenterText(files, label, actions.Length);
+        _view.SetActions(actions, centerLabel, centerDetail);
         _view.SetHot(-1);
 
         SetActivatable(true);
@@ -355,7 +356,8 @@ internal partial class WheelWindow : Window
         if (!actions.SequenceEqual(_view.Actions) || label != _lastDragLabel)
             Log.Write(entry);
         _lastDragLabel = label;
-        _view.SetActions(actions, label);
+        var (centerLabel, centerDetail) = files == null ? (label, null) : Formats.CenterText(files, label, actions.Length);
+        _view.SetActions(actions, centerLabel, centerDetail);
         _feedback.Enter(_hwnd, e.Data, DragDropEffects.None);
         UpdateHot(e);
     }

@@ -79,7 +79,9 @@ internal sealed class WheelView : Canvas
     private string _centerLabel = "";
     private Ellipse? _centerDisc;
     private SolidColorBrush? _centerFill;
-    private TextBlock? _centerText;
+    private TextBlock? _centerText, _centerDetailText;
+    private string? _centerDetail;
+    private string _centerFittedLabel = "";
     private int[] _ringTargets = Array.Empty<int>();
     private int[] _arcTargets = Array.Empty<int>();
     private double _arcStep, _arcSpan, _ringMid;
@@ -255,14 +257,17 @@ internal sealed class WheelView : Canvas
         return bitmap;
     }
 
-    public void SetActions(WheelAction[] actions, string centerLabel)
+    /// <param name="centerLabel">What the centre says: a file's name, or a message when there's no file to describe.</param>
+    /// <param name="centerDetail">A second, smaller line under a file's name, such as its size; null for a message.</param>
+    public void SetActions(WheelAction[] actions, string centerLabel, string? centerDetail = null)
     {
-        if (actions.SequenceEqual(_actions) && centerLabel == _centerLabel)
+        if (actions.SequenceEqual(_actions) && centerLabel == _centerLabel && centerDetail == _centerDetail)
             return;
         if (!actions.SequenceEqual(_actions))
             _hot = -1;
         _actions = actions;
         _centerLabel = centerLabel;
+        _centerDetail = centerDetail;
         Rebuild();
     }
 
@@ -446,8 +451,11 @@ internal sealed class WheelView : Canvas
             _centerFill.BeginAnimation(SolidColorBrush.ColorProperty,
                 new ColorAnimation(on ? CancelHot : _palette.CenterFill, duration) { EasingFunction = ease });
             // Say what letting go (or clicking) here does, rather than what the files are.
+            // Hidden rather than collapsed, so the icon above doesn't move.
             if (_centerText != null)
-                _centerText.Text = on ? "Cancel" : _centerLabel;
+                _centerText.Text = on ? "Cancel" : _centerFittedLabel;
+            if (_centerDetailText != null && _centerDetail != null)
+                _centerDetailText.Visibility = on ? Visibility.Hidden : Visibility.Visible;
             return;
         }
         if (target == MoreIndex || ButtonFor(target) is not { } button)
@@ -644,20 +652,42 @@ internal sealed class WheelView : Canvas
         SetTop(_centerDisc, Mid - CenterRadius);
         _layer.Children.Add(_centerDisc);
 
+        double width = CenterRadius * 2 - 12;
         _centerText = new TextBlock
         {
-            Text = _centerLabel,
-            FontSize = 9.5,
             Foreground = new SolidColorBrush(_palette.CenterLabel),
             TextAlignment = TextAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
-            MaxHeight = 26,
             TextTrimming = TextTrimming.CharacterEllipsis,
             Margin = new Thickness(0, 3, 0, 0),
         };
+        if (_centerDetail == null)
+        {
+            // A message ("Drag onto a button", "Needs Microsoft Office"): up to two lines.
+            _centerText.Text = _centerLabel;
+            _centerText.FontSize = 9.5;
+            _centerText.TextWrapping = TextWrapping.Wrap;
+            _centerText.MaxHeight = 26;
+        }
+        else
+        {
+            // A file's name on one line, shortened in the middle so its extension stays visible.
+            _centerText.FontSize = 10;
+            _centerText.FontWeight = FontWeights.SemiBold;
+            _centerText.Text = FitMiddle(_centerLabel, _centerText, width);
+        }
+        _centerDetailText = new TextBlock
+        {
+            Text = _centerDetail ?? "",
+            FontSize = 9.5,
+            Foreground = new SolidColorBrush(_palette.CenterLabel),
+            Opacity = 0.8,
+            TextAlignment = TextAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Visibility = _centerDetail == null ? Visibility.Collapsed : Visibility.Visible,
+        };
         var center = new StackPanel
         {
-            Width = CenterRadius * 2 - 12,
+            Width = width,
             Children =
             {
                 new TextBlock
@@ -669,6 +699,7 @@ internal sealed class WheelView : Canvas
                     HorizontalAlignment = HorizontalAlignment.Center,
                 },
                 _centerText,
+                _centerDetailText,
             },
         };
         center.Measure(new Size(center.Width, double.PositiveInfinity));
@@ -676,6 +707,29 @@ internal sealed class WheelView : Canvas
         // Placed once, so swapping in "Cancel" for a two-line label doesn't make the icon jump.
         SetTop(center, Mid - center.DesiredSize.Height / 2);
         _layer.Children.Add(center);
+        _centerFittedLabel = _centerText.Text;
+    }
+
+    /// <summary>
+    /// The text as it is if it fits in <paramref name="width"/>, else with its middle replaced by "…":
+    /// "IMG_2025…_Pro.jpg" keeps both how the name starts and what kind of file it is.
+    /// </summary>
+    private static string FitMiddle(string text, TextBlock style, double width)
+    {
+        double Measure(string s) => new FormattedText(s, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            new Typeface(style.FontFamily, style.FontStyle, style.FontWeight, style.FontStretch), style.FontSize, Brushes.Black, 1.0).WidthIncludingTrailingWhitespace;
+        if (Measure(text) <= width)
+            return text;
+        // Keep a little more of the start than the end, and always the extension.
+        int extension = text.LastIndexOf('.') is var dot and >= 0 ? text.Length - dot : 0;
+        int tail = Math.Min(text.Length / 2, Math.Max(6, extension + 3));
+        for (int head = text.Length - tail - 1; head > 1; head--)
+        {
+            string candidate = text[..head] + "…" + text[^tail..];
+            if (Measure(candidate) <= width)
+                return candidate;
+        }
+        return text[..1] + "…" + text[^Math.Min(tail, text.Length - 1)..];
     }
 
     /// <param name="corner">Rounding of the resting shape, which <see cref="Segment"/> left for the stroke to add.</param>

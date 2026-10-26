@@ -38,7 +38,8 @@ internal static class Previews
                 var view = new WheelView();
                 view.ApplySettings(settings);
                 view.ArcAbove = name.EndsWith("-above");
-                view.SetActions(actions, "Image");
+                // A long name, to show it shortened in the middle.
+                view.SetActions(actions, "IMG_20250908_105605_Pro.jpg", "3.4 MB");
                 view.SetHot(expanded ? WheelView.MoreIndex : 1);
                 if (expanded && view.ArcOrder.Count > 0)
                     view.SetHot(view.ArcOrder[^1]);

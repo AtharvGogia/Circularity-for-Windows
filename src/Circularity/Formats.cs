@@ -207,6 +207,31 @@ internal static class Formats
         return (label, actions.ToArray());
     }
 
+    /// <summary>
+    /// What the wheel's centre says: the file's name and size, or for several, how many ("3 images")
+    /// and their total size. When there are no buttons, <paramref name="label"/>'s reason instead
+    /// ("Needs Microsoft Office"), since that's what matters then.
+    /// </summary>
+    /// <param name="label">From <see cref="ActionsFor"/>.</param>
+    public static (string Label, string? Detail) CenterText(IReadOnlyList<string> files, string label, int buttonCount)
+    {
+        if (files.Count == 0 || buttonCount == 0)
+            return (label, null);
+        string name = files.Count == 1 ? Path.GetFileName(files[0]) : label;
+        long bytes = 0;
+        bool any = false;
+        foreach (string file in files)
+        {
+            var info = new FileInfo(file);
+            if (info.Exists)
+            {
+                bytes += info.Length;
+                any = true;
+            }
+        }
+        return (name, any ? FileSizes.Format(bytes) : null);
+    }
+
     /// <summary>The kinds of file whose buttons can be rearranged in Settings.</summary>
     public static readonly FileKind[] CustomizableKinds = { FileKind.Image, FileKind.Video, FileKind.Audio, FileKind.Document };
 
