@@ -138,6 +138,8 @@ Settings is live: hover and click it, and switch it between image, video, audio 
   **notifications** when conversions finish and when Circularity starts (problems always show), and
   **start at sign-in**: the same Windows sign-in entry the installer's checkbox creates, so the two
   always agree; it also notices (and, when ticked, undoes) "Disabled" in Task Manager's Startup apps
+- **Features**: **copy converted file(s) to clipboard** when conversions finish — the file itself
+  is copied (like Ctrl+C in File Explorer), so you can paste it directly into another folder or app
 - **About**: what Circularity found on this PC (FFmpeg, Office, WebView2, PDFium, Windows) and
   **Copy diagnostics**, which puts that list and the end of the log on the clipboard for a bug report
 

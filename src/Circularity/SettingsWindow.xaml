@@ -119,6 +119,16 @@
                     </ScrollViewer>
                 </TabItem>
 
+                <TabItem Header="Features">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="4,12,12,8">
+                            <TextBlock Text="After conversion" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <CheckBox x:Name="CopyClipboardCheck" Content="Copy converted file(s) to clipboard" />
+                            <TextBlock Text="The file itself is copied (like Ctrl+C in File Explorer), so you can paste it directly into another folder or app." Opacity="0.7" Margin="18,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
                 <TabItem x:Name="AboutTab" Header="About">
                     <DockPanel Margin="4,12,4,4">
                         <StackPanel DockPanel.Dock="Top">

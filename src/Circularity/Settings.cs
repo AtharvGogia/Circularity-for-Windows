@@ -39,6 +39,9 @@ internal sealed class Settings
     /// <summary>Show "Circularity is running" when it starts.</summary>
     public bool NotifyOnStart { get; set; } = true;
 
+    /// <summary>Copy the converted file path(s) to the clipboard when conversions finish.</summary>
+    public bool CopyToClipboardOnFinish { get; set; } = false;
+
     /// <summary>Set once the first-run welcome has been shown.</summary>
     public bool WelcomeShown { get; set; }
 

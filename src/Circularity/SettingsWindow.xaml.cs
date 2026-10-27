@@ -88,6 +88,7 @@ internal partial class SettingsWindow : Window
         ShiftCheck.Click += (_, _) => OnControlChanged();
         HotkeyCheck.Click += (_, _) => OnControlChanged();
         NotifyFinishCheck.Click += (_, _) => OnControlChanged();
+        CopyClipboardCheck.Click += (_, _) => OnControlChanged();
         NotifyStartCheck.Click += (_, _) => OnControlChanged();
         foreach (var option in new[] { SystemTheme, LightTheme, DarkTheme })
             option.Checked += (_, _) => OnControlChanged();
@@ -109,6 +110,7 @@ internal partial class SettingsWindow : Window
         ShiftCheck.IsChecked = _settings.ShiftTrigger;
         HotkeyCheck.IsChecked = _settings.HotkeyEnabled;
         NotifyFinishCheck.IsChecked = _settings.NotifyOnFinish;
+        CopyClipboardCheck.IsChecked = _settings.CopyToClipboardOnFinish;
         NotifyStartCheck.IsChecked = _settings.NotifyOnStart;
         SystemTheme.IsChecked = _settings.Theme == AppTheme.System;
         LightTheme.IsChecked = _settings.Theme == AppTheme.Light;
@@ -130,6 +132,7 @@ internal partial class SettingsWindow : Window
         _settings.ShiftTrigger = ShiftCheck.IsChecked == true;
         _settings.HotkeyEnabled = HotkeyCheck.IsChecked == true;
         _settings.NotifyOnFinish = NotifyFinishCheck.IsChecked == true;
+        _settings.CopyToClipboardOnFinish = CopyClipboardCheck.IsChecked == true;
         _settings.NotifyOnStart = NotifyStartCheck.IsChecked == true;
         _settings.Theme = LightTheme.IsChecked == true ? AppTheme.Light
             : DarkTheme.IsChecked == true ? AppTheme.Dark

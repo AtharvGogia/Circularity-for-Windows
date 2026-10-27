@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -648,6 +649,30 @@ public partial class App : Application
                 : Path.GetFileName(j.OutputPath)));
             if (cancelled > 0)
                 body += $" ({cancelled} cancelled)";
+
+            // Copy output file(s) to clipboard if enabled
+            if (_settings.CopyToClipboardOnFinish)
+            {
+                try
+                {
+                    var filePaths = succeeded
+                        .Where(j => !string.IsNullOrEmpty(j.OutputPath) && File.Exists(j.OutputPath!))
+                        .Select(j => j.OutputPath!)
+                        .ToArray();
+                    if (filePaths.Length > 0)
+                    {
+                        var paths = new System.Collections.Specialized.StringCollection();
+                        paths.AddRange(filePaths);
+                        Clipboard.SetFileDropList(paths);
+                        body += "\nFile copied to clipboard.";
+                    }
+                }
+                catch (System.Runtime.InteropServices.COMException)
+                {
+                    // Clipboard busy, ignore silently
+                }
+            }
+
             Notify(title, body + "\nClick to show.", Forms.ToolTipIcon.Info, openOnClick: succeeded[0].OutputPath);
         }
         else
