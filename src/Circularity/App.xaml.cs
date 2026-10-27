@@ -45,6 +45,13 @@ public partial class App : Application
     private GlobalHotkey? _hotkey;
     private bool _dialogOpen;
 
+    // Background update checks: one shortly after start, then one every interval. Settings apply on
+    // every click, so the timers are only rebuilt when the update options themselves change.
+    private System.Windows.Threading.DispatcherTimer? _firstUpdateCheck;
+    private System.Windows.Threading.DispatcherTimer? _updateCheckTimer;
+    private (bool Enabled, int Hours)? _updateSchedule;
+    private bool _checkingForUpdates;
+
     // Explorer launches one copy per selected file for "Convert with Circularity", each handing its
     // file over separately, so files arriving close together are gathered into one wheel.
     private readonly List<string> _incomingFiles = new();
@@ -52,6 +59,9 @@ public partial class App : Application
 
     /// <summary>What clicking the latest notification opens: a converted file or folder, or nothing.</summary>
     private string? _notificationTarget;
+
+    /// <summary>Run instead of opening a file when the latest notification is clicked (an update, say).</summary>
+    private Action? _notificationAction;
 
     // Read on the hook thread.
     private volatile bool _paused;
@@ -112,6 +122,7 @@ public partial class App : Application
 
         _tray = CreateTray();
         ApplySettings(_settings);
+        StartAutoUpdateCheck();
 
         _hook = new GestureHook { ShouldArm = ShouldArm };
         _hook.Triggered += (x, y, _) => Dispatcher.BeginInvoke(() =>
@@ -242,6 +253,77 @@ public partial class App : Application
             var old = _tray.Icon;
             _tray.Icon = AppIcon.Create(settings.Accent);
             old?.Dispose();
+        }
+    }
+
+    /// <summary>(Re)starts the background update checks if their settings changed.</summary>
+    private void StartAutoUpdateCheck()
+    {
+        int hours = Settings.ClampUpdateInterval(_settings.AutoCheckIntervalHours);
+        var schedule = (_settings.AutoCheckForUpdates, hours);
+        if (_updateSchedule == schedule)
+            return;
+        bool firstTime = _updateSchedule == null;
+        _updateSchedule = schedule;
+
+        _updateCheckTimer?.Stop();
+        _updateCheckTimer = null;
+        if (!_settings.AutoCheckForUpdates)
+        {
+            _firstUpdateCheck?.Stop();
+            _firstUpdateCheck = null;
+            return;
+        }
+
+        // 0 means "On startup" only.
+        if (hours > 0)
+        {
+            _updateCheckTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromHours(hours) };
+            _updateCheckTimer.Tick += async (_, _) => await CheckForUpdatesSilentAsync();
+            _updateCheckTimer.Start();
+        }
+
+        // Once shortly after start (or after turning it on), not again for every interval change.
+        if (firstTime || _firstUpdateCheck == null)
+        {
+            _firstUpdateCheck?.Stop();
+            _firstUpdateCheck = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(2) };
+            _firstUpdateCheck.Tick += async (_, _) =>
+            {
+                _firstUpdateCheck?.Stop();
+                await CheckForUpdatesSilentAsync();
+            };
+            _firstUpdateCheck.Start();
+        }
+    }
+
+    /// <summary>Checks for an update without any window, and mentions each new version only once.</summary>
+    private async Task CheckForUpdatesSilentAsync()
+    {
+        if (_checkingForUpdates || !_settings.AutoCheckForUpdates)
+            return;
+        _checkingForUpdates = true;
+        try
+        {
+            var update = await new UpdateChecker().GetLatestAsync();
+            if (update == null || !update.IsNewer || update.Tag == _settings.LastNotifiedUpdate)
+                return;
+
+            _settings.LastNotifiedUpdate = update.Tag;
+            _settings.Save();
+            Notify($"Circularity {update.Tag.TrimStart('v')} is available",
+                $"You have {Diagnostics.AppVersion()}. Click to see what's new and update.",
+                Forms.ToolTipIcon.Info,
+                onClick: OpenUpdates);
+        }
+        catch (Exception ex)
+        {
+            // Runs from a timer, so nothing may escape: an unhandled exception here would close the app.
+            Log.Write($"Background update check failed: {ex.Message}");
+        }
+        finally
+        {
+            _checkingForUpdates = false;
         }
     }
 
@@ -557,8 +639,11 @@ public partial class App : Application
         _settingsWindow = Dialog(new SettingsWindow(_settings, _queue!.CanHandle, _ffmpeg));
         _settingsWindow.SettingsChanged += settings =>
         {
+            // Kept by the app, not shown in Settings, so the window's copy may be out of date.
+            settings.LastNotifiedUpdate = _settings.LastNotifiedUpdate;
             ApplySettings(settings);
             settings.Save();
+            StartAutoUpdateCheck();
         };
         _settingsWindow.CheckForUpdatesRequested += OpenUpdates;
         _settingsWindow.Closed += (_, _) =>
@@ -661,10 +746,10 @@ public partial class App : Application
                         .ToArray();
                     if (filePaths.Length > 0)
                     {
-                        var paths = new System.Collections.Specialized.StringCollection();
+                        var paths = new StringCollection();
                         paths.AddRange(filePaths);
                         Clipboard.SetFileDropList(paths);
-                        body += "\nFile copied to clipboard.";
+                        body += filePaths.Length == 1 ? "\nFile copied to clipboard." : "\nFiles copied to clipboard.";
                     }
                 }
                 catch (System.Runtime.InteropServices.COMException)
@@ -763,16 +848,25 @@ public partial class App : Application
     }
 
     /// <param name="openOnClick">A file (shown selected in Explorer) or folder (opened) for when the notification is clicked.</param>
-    private void Notify(string title, string text, Forms.ToolTipIcon icon, string? openOnClick = null)
+    /// <param name="onClick">Run when the notification is clicked, instead of opening a file.</param>
+    private void Notify(string title, string text, Forms.ToolTipIcon icon, string? openOnClick = null, Action? onClick = null)
     {
         _notificationTarget = openOnClick;
+        _notificationAction = onClick;
         _tray?.ShowBalloonTip(4000, title, string.IsNullOrEmpty(text) ? " " : text, icon);
     }
 
     private void OnNotificationClicked()
     {
         string? target = _notificationTarget;
+        var action = _notificationAction;
         _notificationTarget = null;
+        _notificationAction = null;
+        if (action != null)
+        {
+            action();
+            return;
+        }
         try
         {
             if (Directory.Exists(target))

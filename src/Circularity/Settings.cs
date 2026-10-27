@@ -42,6 +42,17 @@ internal sealed class Settings
     /// <summary>Copy the converted file path(s) to the clipboard when conversions finish.</summary>
     public bool CopyToClipboardOnFinish { get; set; } = false;
 
+    /// <summary>Automatically check for updates in the background.</summary>
+    public bool AutoCheckForUpdates { get; set; } = false;
+
+    /// <summary>How often to check for updates, in hours: 0 (only at start) or 1 to 720 (30 days).</summary>
+    public int AutoCheckIntervalHours { get; set; } = 24;
+
+    /// <summary>The newest release the background check has already mentioned, so it's mentioned only once.</summary>
+    public string? LastNotifiedUpdate { get; set; }
+
+    public static int ClampUpdateInterval(int hours) => hours <= 0 ? 0 : Math.Min(hours, 720);
+
     /// <summary>Set once the first-run welcome has been shown.</summary>
     public bool WelcomeShown { get; set; }
 

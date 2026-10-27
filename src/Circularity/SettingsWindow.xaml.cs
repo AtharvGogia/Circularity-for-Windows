@@ -90,6 +90,8 @@ internal partial class SettingsWindow : Window
         NotifyFinishCheck.Click += (_, _) => OnControlChanged();
         CopyClipboardCheck.Click += (_, _) => OnControlChanged();
         NotifyStartCheck.Click += (_, _) => OnControlChanged();
+        AutoCheckUpdatesCheck.Click += (_, _) => OnAutoCheckToggled();
+        AutoCheckIntervalCombo.SelectionChanged += (_, _) => OnControlChanged();
         foreach (var option in new[] { SystemTheme, LightTheme, DarkTheme })
             option.Checked += (_, _) => OnControlChanged();
 
@@ -112,6 +114,20 @@ internal partial class SettingsWindow : Window
         NotifyFinishCheck.IsChecked = _settings.NotifyOnFinish;
         CopyClipboardCheck.IsChecked = _settings.CopyToClipboardOnFinish;
         NotifyStartCheck.IsChecked = _settings.NotifyOnStart;
+        AutoCheckUpdatesCheck.IsChecked = _settings.AutoCheckForUpdates;
+        PopulateAutoCheckIntervals();
+        int savedHours = Settings.ClampUpdateInterval(_settings.AutoCheckIntervalHours);
+        foreach (ComboBoxItem item in AutoCheckIntervalCombo.Items)
+        {
+            if ((int)item.Tag == savedHours)
+            {
+                AutoCheckIntervalCombo.SelectedItem = item;
+                break;
+            }
+        }
+        if (AutoCheckIntervalCombo.SelectedItem == null)
+            AutoCheckIntervalCombo.SelectedIndex = 1; // 24 hours, for a value that isn't in the list
+        AutoCheckIntervalPanel.Visibility = _settings.AutoCheckForUpdates ? Visibility.Visible : Visibility.Collapsed;
         SystemTheme.IsChecked = _settings.Theme == AppTheme.System;
         LightTheme.IsChecked = _settings.Theme == AppTheme.Light;
         DarkTheme.IsChecked = _settings.Theme == AppTheme.Dark;
@@ -119,6 +135,31 @@ internal partial class SettingsWindow : Window
         BuildSwatches();
         Refresh();
         RefreshButtons();
+    }
+
+    private void PopulateAutoCheckIntervals()
+    {
+        var intervals = new (string Label, int Hours)[]
+        {
+            ("only when Circularity starts", 0),
+            ("every day", 24),
+            ("every 3 days", 72),
+            ("every week", 168),
+            ("every 30 days", 720)
+        };
+        // Called on every load ("Reset to defaults" reloads), so fill the list only once.
+        if (AutoCheckIntervalCombo.Items.Count > 0)
+            return;
+        foreach (var (label, hours) in intervals)
+            AutoCheckIntervalCombo.Items.Add(new ComboBoxItem { Content = label, Tag = hours });
+    }
+
+    private void OnAutoCheckToggled()
+    {
+        if (_loading)
+            return;
+        AutoCheckIntervalPanel.Visibility = AutoCheckUpdatesCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        OnControlChanged();
     }
 
     private void OnControlChanged()
@@ -134,6 +175,8 @@ internal partial class SettingsWindow : Window
         _settings.NotifyOnFinish = NotifyFinishCheck.IsChecked == true;
         _settings.CopyToClipboardOnFinish = CopyClipboardCheck.IsChecked == true;
         _settings.NotifyOnStart = NotifyStartCheck.IsChecked == true;
+        _settings.AutoCheckForUpdates = AutoCheckUpdatesCheck.IsChecked == true;
+        _settings.AutoCheckIntervalHours = (AutoCheckIntervalCombo.SelectedItem as ComboBoxItem)?.Tag as int? ?? 24;
         _settings.Theme = LightTheme.IsChecked == true ? AppTheme.Light
             : DarkTheme.IsChecked == true ? AppTheme.Dark
             : AppTheme.System;

@@ -7,6 +7,10 @@ mid-drag, and drop it on a button in the wheel that pops up around it.
 
 Everything happens on your PC: nothing is uploaded, and the original file is never changed.
 
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/AtharvGogia/Circularity-for-Windows?include_prereleases&label=Latest%20Release)](https://github.com/AtharvGogia/Circularity-for-Windows/releases)
+[![GitHub Downloads](https://img.shields.io/github/downloads/AtharvGogia/Circularity-for-Windows/total?label=Total%20Downloads)](https://github.com/AtharvGogia/Circularity-for-Windows/releases)
+
 Made by **Atharv Gogia**. Open source under the [MIT licence](LICENSE).
 
 ## Download
@@ -19,7 +23,8 @@ later) or Windows 11, 64-bit.
 The installer isn't code-signed, so Windows SmartScreen may say "Windows protected your PC" the
 first time: choose **More info → Run anyway**.
 
-To update later, right-click the tray icon → **Check for updates…** (or use the button in Settings).
+To update later, right-click the tray icon → **Check for updates…** (or use the button in Settings),
+or turn on automatic checks in Settings → Features.
 
 ## What it does
 
@@ -138,8 +143,11 @@ Settings is live: hover and click it, and switch it between image, video, audio 
   **notifications** when conversions finish and when Circularity starts (problems always show), and
   **start at sign-in**: the same Windows sign-in entry the installer's checkbox creates, so the two
   always agree; it also notices (and, when ticked, undoes) "Disabled" in Task Manager's Startup apps
-- **Features**: **copy converted file(s) to clipboard** when conversions finish — the file itself
-  is copied (like Ctrl+C in File Explorer), so you can paste it directly into another folder or app
+- **Features**: **copy converted files to the clipboard** when conversions finish (the files
+  themselves, like Ctrl+C in File Explorer, so you can paste them into another folder or app), and
+  **check for updates automatically**, off by default: when Circularity starts, or every day, 3
+  days, week or 30 days. A new version is mentioned once, in a notification that opens the
+  update window
 - **About**: what Circularity found on this PC (FFmpeg, Office, WebView2, PDFium, Windows) and
   **Copy diagnostics**, which puts that list and the end of the log on the clipboard for a bug report
 
@@ -157,7 +165,7 @@ It produces, in `artifacts\`:
 
 | Output | What it is | Size |
 | --- | --- | --- |
-| `artifacts\CircularitySetup-0.3.4.exe` | The installer to hand out | ~72 MB |
+| `artifacts\CircularitySetup-0.4.0.exe` | The installer to hand out | ~72 MB |
 | `artifacts\Circularity\Circularity.exe` | The app itself, in a self-contained folder that also runs without installing (e.g. from a USB stick) | ~240 MB folder |
 
 The installer:
@@ -318,7 +326,7 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 The in-app updater looks at this repository's latest GitHub release, so a release must:
 
 1. be tagged with the version, e.g. `v0.3.0` (matching `<Version>` in `src/Circularity/Circularity.csproj`), and
-2. have the installer from `build\build.ps1`, `CircularitySetup-0.3.4.exe`, attached as an asset.
+2. have the installer from `build\build.ps1`, `CircularitySetup-0.4.0.exe`, attached as an asset.
 
 Whatever is written in the release's description is shown in the update window as "what's new".
 The repository has to be public for the updater to see releases.

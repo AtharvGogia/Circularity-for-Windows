@@ -125,6 +125,14 @@
                             <TextBlock Text="After conversion" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
                             <CheckBox x:Name="CopyClipboardCheck" Content="Copy converted file(s) to clipboard" />
                             <TextBlock Text="The file itself is copied (like Ctrl+C in File Explorer), so you can paste it directly into another folder or app." Opacity="0.7" Margin="18,4,0,0" TextWrapping="Wrap" />
+
+                            <TextBlock Text="Updates" FontSize="16" FontWeight="SemiBold" Margin="0,24,0,8" />
+                            <CheckBox x:Name="AutoCheckUpdatesCheck" Content="Automatically check for updates in the background" />
+                            <DockPanel Margin="18,4,0,0" LastChildFill="True" Visibility="Visible" x:Name="AutoCheckIntervalPanel">
+                                <TextBlock DockPanel.Dock="Left" Text="Check" VerticalAlignment="Center" Opacity="0.7" />
+                                <ComboBox x:Name="AutoCheckIntervalCombo" MinWidth="200" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="8,0,0,0" />
+                            </DockPanel>
+                            <TextBlock Text="Checks run silently. If an update is found, you'll get a notification." Opacity="0.7" Margin="18,4,0,0" TextWrapping="Wrap" />
                         </StackPanel>
                     </ScrollViewer>
                 </TabItem>
