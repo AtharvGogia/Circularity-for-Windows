@@ -16,15 +16,30 @@ internal partial class UpdateWindow : Window
     /// <summary>Raised just before the installer starts, so the app can get out of its way.</summary>
     public event Action? InstallerStarted;
 
-    public UpdateWindow()
+    /// <param name="checkNow">False for previews, which fill it in with <see cref="ShowAvailable"/> instead of asking GitHub.</param>
+    public UpdateWindow(bool checkNow = true)
     {
         InitializeComponent();
-        Loaded += async (_, _) =>
+        if (checkNow)
         {
-            WindowHelpers.ForceForeground(this);
-            await CheckAsync();
-        };
+            Loaded += async (_, _) =>
+            {
+                WindowHelpers.ForceForeground(this);
+                await CheckAsync();
+            };
+        }
         Closed += (_, _) => _cancel.Cancel();
+    }
+
+    /// <summary>Shows a newer version as found, without asking GitHub (for previews).</summary>
+    internal void ShowAvailable(string version, string notes)
+    {
+        Progress.Visibility = Visibility.Collapsed;
+        Heading.Text = $"Circularity {version} is available";
+        Detail.Text = $"You have {Diagnostics.AppVersion()}.";
+        ShowNotes(notes, version);
+        ReleasePageButton.Visibility = Visibility.Visible;
+        InstallButton.Visibility = Visibility.Visible;
     }
 
     private async System.Threading.Tasks.Task CheckAsync()
@@ -52,7 +67,7 @@ internal partial class UpdateWindow : Window
             Detail.Text = $"You have {Diagnostics.AppVersion()}.";
             if (_update.Notes.Length > 0)
             {
-                Notes.Text = _update.Notes;
+                ShowNotes(_update.Notes, _update.Tag.TrimStart('v'));
                 NotesBox.Visibility = Visibility.Visible;
             }
             InstallButton.Visibility = _update.InstallerUrl != null ? Visibility.Visible : Visibility.Collapsed;
@@ -69,6 +84,22 @@ internal partial class UpdateWindow : Window
             Detail.Text = ex is HttpRequestException ? "Check your internet connection and try again." : ex.Message;
             ReleasePageButton.Visibility = Visibility.Visible;
         }
+    }
+
+    /// <summary>The release's notes, formatted; as plain text if the Markdown can't be read.</summary>
+    internal void ShowNotes(string markdown, string version)
+    {
+        try
+        {
+            // Their own "## Circularity 0.5.0" heading would only repeat the window's.
+            Notes.Content = MarkdownView.Render(markdown, skipHeading: version);
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"Couldn't format the release notes: {ex.Message}");
+            Notes.Content = new System.Windows.Controls.TextBlock { Text = markdown, TextWrapping = TextWrapping.Wrap };
+        }
+        NotesBox.Visibility = Visibility.Visible;
     }
 
     private async void Install_Click(object sender, RoutedEventArgs e)

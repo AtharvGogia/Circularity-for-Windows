@@ -39,6 +39,8 @@ internal partial class SettingsWindow : Window
     private readonly Engine.FfmpegConverter? _ffmpeg;
     private Settings _settings;
     private bool _loading;
+    // The folder last chosen to save into, kept while "Next to the original" is picked so switching back is one click.
+    private string? _chosenFolder;
     private string _sample = "photo.jpg";
     private FileKind _kind = FileKind.Image;
     private List<DiagnosticItem>? _diagnostics;
@@ -101,6 +103,15 @@ internal partial class SettingsWindow : Window
         NotifyStartCheck.Click += (_, _) => OnControlChanged();
         AutoCheckUpdatesCheck.Click += (_, _) => OnAutoCheckToggled();
         AutoCheckIntervalCombo.SelectionChanged += (_, _) => OnControlChanged();
+        SaveBesideRadio.Checked += (_, _) => OnControlChanged();
+        SaveToFolderRadio.Checked += (_, _) =>
+        {
+            // Picking "this folder" before one has been chosen goes straight to choosing it.
+            if (!_loading && _chosenFolder == null && !ChooseFolder())
+                SaveBesideRadio.IsChecked = true;
+            else
+                OnControlChanged();
+        };
         foreach (var option in new[] { SystemTheme, LightTheme, DarkTheme })
             option.Checked += (_, _) => OnControlChanged();
 
@@ -137,6 +148,11 @@ internal partial class SettingsWindow : Window
         if (AutoCheckIntervalCombo.SelectedItem == null)
             AutoCheckIntervalCombo.SelectedIndex = 1; // 24 hours, for a value that isn't in the list
         AutoCheckIntervalPanel.Visibility = _settings.AutoCheckForUpdates ? Visibility.Visible : Visibility.Collapsed;
+        if (!string.IsNullOrWhiteSpace(_settings.OutputFolder))
+            _chosenFolder = _settings.OutputFolder;
+        SaveToFolderRadio.IsChecked = !string.IsNullOrWhiteSpace(_settings.OutputFolder);
+        SaveBesideRadio.IsChecked = !SaveToFolderRadio.IsChecked;
+        ShowChosenFolder();
         SystemTheme.IsChecked = _settings.Theme == AppTheme.System;
         LightTheme.IsChecked = _settings.Theme == AppTheme.Light;
         DarkTheme.IsChecked = _settings.Theme == AppTheme.Dark;
@@ -163,6 +179,32 @@ internal partial class SettingsWindow : Window
             AutoCheckIntervalCombo.Items.Add(new ComboBoxItem { Content = label, Tag = hours });
     }
 
+    private void ChooseFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (ChooseFolder())
+            SaveToFolderRadio.IsChecked = true;
+        OnControlChanged();
+    }
+
+    /// <summary>Asks for the folder to save into; false if the user cancelled.</summary>
+    private bool ChooseFolder()
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "Save converted files in" };
+        if (_chosenFolder != null && System.IO.Directory.Exists(_chosenFolder))
+            dialog.InitialDirectory = _chosenFolder;
+        if (dialog.ShowDialog(this) != true)
+            return false;
+        _chosenFolder = dialog.FolderName;
+        ShowChosenFolder();
+        return true;
+    }
+
+    private void ShowChosenFolder()
+    {
+        SaveFolderText.Text = _chosenFolder == null ? "In a folder I choose" : $"In {_chosenFolder}";
+        SaveToFolderRadio.ToolTip = _chosenFolder;
+    }
+
     private void OnAutoCheckToggled()
     {
         if (_loading)
@@ -186,6 +228,7 @@ internal partial class SettingsWindow : Window
         _settings.NotifyOnStart = NotifyStartCheck.IsChecked == true;
         _settings.AutoCheckForUpdates = AutoCheckUpdatesCheck.IsChecked == true;
         _settings.AutoCheckIntervalHours = (AutoCheckIntervalCombo.SelectedItem as ComboBoxItem)?.Tag as int? ?? 24;
+        _settings.OutputFolder = SaveToFolderRadio.IsChecked == true ? _chosenFolder : null;
         _settings.Theme = LightTheme.IsChecked == true ? AppTheme.Light
             : DarkTheme.IsChecked == true ? AppTheme.Dark
             : AppTheme.System;

@@ -20,9 +20,9 @@ internal static class Log
                 Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
                 File.AppendAllText(FilePath, $"{DateTime.Now:HH:mm:ss.fff}  {message}{Environment.NewLine}");
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                // Logging must never take the app (or the mouse hook) down.
+                // Logging must never take the app (or the mouse hook) down, even when the folder is locked down.
             }
         }
     }

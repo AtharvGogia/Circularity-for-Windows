@@ -14,6 +14,24 @@ namespace EngineSmokeTest;
 /// <summary>Renders the wheel and the settings window to PNGs, to check the look without a mouse.</summary>
 internal static class Previews
 {
+    /// <summary>Release notes as written on GitHub (the shape of 0.4.1's), with a bit of everything Markdown can do.</summary>
+    private const string SampleReleaseNotes = """
+        ## Circularity 0.5.0
+
+        ### Save as HEIC and AVIF
+        - **AVIF** works on every PC and keeps transparency.
+        - **HEIC** where Windows has Microsoft's *HEVC extension*.
+
+        ### Fixes
+        1. Converting iPhone photos on PCs ~~without~~ lacking the HEVC extension.
+        2. Compressing a video to a size, such as `25 MB`.
+
+        > Crash reports are kept in `%LOCALAPPDATA%\Circularity\crashes`.
+
+        ### Install
+        Download **CircularitySetup-0.5.0.exe** below, or see the [release page](https://github.com/AtharvGogia/Circularity-for-Windows/releases).
+        """;
+
     public static int Render(string folder)
     {
         int exitCode = 1;
@@ -152,8 +170,10 @@ internal static class Previews
                 ("settings-buttons", theme => { var w = new SettingsWindow(WithPreset(theme)); return OnTab(w, w.ButtonsTab); }),
                 ("settings-general", theme => { var w = new SettingsWindow(new Settings { Theme = theme }); return OnTab(w, (TabItem)w.Tabs.Items[2]); }),
                 ("settings-about", theme => { var w = new SettingsWindow(new Settings { Theme = theme }, null, new Circularity.Engine.FfmpegConverter()); return OnTab(w, w.AboutTab); }),
+                ("settings-features", theme => { var w = new SettingsWindow(new Settings { Theme = theme, OutputFolder = @"D:\Converted", CopyToClipboardOnFinish = true }); return OnTab(w, (TabItem)w.Tabs.Items[3]); }),
                 ("settings-help", theme => { var w = new SettingsWindow(new Settings { Theme = theme }); return OnTab(w, (TabItem)w.Tabs.Items[4]); }),
                 ("welcome", theme => new WelcomeWindow(new Settings { Theme = theme })),
+                ("update", _ => { var w = new UpdateWindow(checkNow: false); w.ShowAvailable("0.5.0", SampleReleaseNotes); return w; }),
                 ("tutorial", theme => Tutorial(theme, 0)),
                 ("tutorial-dragging", theme => Tutorial(theme, 1)),
                 ("tutorial-try", theme => Tutorial(theme, 3)),

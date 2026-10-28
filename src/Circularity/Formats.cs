@@ -53,7 +53,9 @@ internal static class Formats
     // converter can actually do it for every dropped file (Office ones need Office, for example).
     // Order matters when there are more than the wheel's six buttons: the first ones get a place on
     // the ring and the later ones go behind "More".
-    private static readonly string[] ImageTargets = { "png", "jpg", "webp", "pdf", "gif", "bmp", "tiff" };
+    // HEIC needs Windows' HEIF and HEVC extensions to write, and AVIF FFmpeg's libaom; they're only
+    // offered where that works (see ImageConverter.CanHandle).
+    private static readonly string[] ImageTargets = { "png", "jpg", "webp", "pdf", "gif", "avif", "heic", "bmp", "tiff" };
     private static readonly string[] VideoTargets = { "mp4", "webm", "mov", "gif", "mp3" };
     private static readonly string[] AudioTargets = { "mp3", "wav", "flac", "ogg", "m4a" };
     private static readonly Dictionary<string, string[]> DocumentTargets = new()
@@ -137,6 +139,7 @@ internal static class Formats
         {
             "jpeg" or "jfif" => "jpg",
             "tif" => "tiff",
+            "heif" or "hif" => "heic",
             "aif" or "aifc" => "aiff",
             "markdown" => "md",
             "htm" => "html",

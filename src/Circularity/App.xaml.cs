@@ -29,6 +29,9 @@ public partial class App : Application
 
     private const string TrayTitle = "Circularity";
 
+    /// <summary>Passed by the uninstaller (see Circularity.iss) to unregister the notifications.</summary>
+    public const string UninstallCleanupArgument = "--uninstall-cleanup";
+
     private Mutex? _singleInstance;
     private bool _isMainInstance; // False for a copy that only handed its files to the running one.
     private Settings _settings = new();
@@ -74,8 +77,28 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Run by the uninstaller: take out what Windows was told about the notifications, then go.
+        if (e.Args.Contains(UninstallCleanupArgument))
+        {
+            FinishedToast.Unregister();
+            Shutdown();
+            return;
+        }
+
         var launchFiles = e.Args.Where(File.Exists).ToArray();
         _singleInstance = new Mutex(true, @"Local\Circularity", out _isMainInstance);
+        if (!_isMainInstance && e.Args.Contains(CrashGuard.RestartedArgument))
+        {
+            // Started by a copy that just crashed: wait for it to finish exiting, then take over.
+            try
+            {
+                _isMainInstance = _singleInstance.WaitOne(TimeSpan.FromSeconds(10));
+            }
+            catch (AbandonedMutexException)
+            {
+                _isMainInstance = true; // It died holding the lock, which now belongs to this copy.
+            }
+        }
         if (!_isMainInstance)
         {
             // Already running: hand over the files, or ask it to show Settings, and quietly exit.
@@ -93,12 +116,11 @@ public partial class App : Application
         // tray. The price is more CPU while the wheel is on screen (roughly 1.3 s instead of 0.7 s
         // over a typical use), which is a second or two at a time; idle, both use none.
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
-        DispatcherUnhandledException += (_, args) =>
-        {
-            Log.Write($"Unhandled exception: {args.Exception}");
-            Notify("Something went wrong", args.Exception.Message, Forms.ToolTipIcon.Error);
-            args.Handled = true;
-        };
+        CrashGuard.Install(this,
+            recovered: crash => Notify("Something went wrong",
+                $"{crash.Message}\nCircularity carried on. Click to report it.", Forms.ToolTipIcon.Error, onClick: () => ReportBug(crash)),
+            // Otherwise the icon stays in the tray, looking alive, until the mouse passes over it.
+            dying: () => _tray?.Dispose());
 
         _settings = Settings.Load();
 
@@ -143,10 +165,21 @@ public partial class App : Application
         _hotkey.Pressed += OnHotkey;
         UpdateHotkey();
 
+        // Clicks on the "Done" notification's buttons arrive on a background thread.
+        FinishedToast.Listen((action, path) => Dispatcher.BeginInvoke(() => OnFinishedToastAction(action, path)));
+
+        var crashed = CrashGuard.TakePending();
         if (launchFiles.Length > 0)
         {
             // Started by "Convert with Circularity" or Send to: go straight to the wheel.
             ReceiveFiles(launchFiles);
+        }
+        else if (crashed != null)
+        {
+            bool restarted = e.Args.Contains(CrashGuard.RestartedArgument);
+            Notify("Circularity closed unexpectedly",
+                (restarted ? "It started again by itself. " : "") + "Click to report what happened, so it can be fixed.",
+                Forms.ToolTipIcon.Warning, onClick: () => ReportBug(crashed));
         }
         else if (!_settings.WelcomeShown)
         {
@@ -154,11 +187,37 @@ public partial class App : Application
             _settings.Save();
             ShowWelcome();
         }
-        else if (_settings.NotifyOnStart)
+        else if (_settings.NotifyOnStart && !e.Args.Contains(FinishedToast.ActivatedArgument))
         {
+            // (Not when started by clicking an old notification: the click itself is the point.)
             Notify("Circularity is running",
                 "Drag a file and tap right-click (or Shift), or select files and press Ctrl+Alt+C.", Forms.ToolTipIcon.Info);
         }
+
+        CrashTestHook(e.Args);
+    }
+
+    /// <summary>
+    /// For EngineSmokeTest --crash-test only: fails on purpose shortly after starting, on this thread
+    /// ("ui") or another ("background"), to check the safety net. Never in the copy restarted after a
+    /// crash, so the test can't loop.
+    /// </summary>
+    private void CrashTestHook(string[] args)
+    {
+        string? mode = Environment.GetEnvironmentVariable("CIRCULARITY_TEST_CRASH");
+        if (mode == null || args.Contains(CrashGuard.RestartedArgument))
+            return;
+        CrashGuard.RestartAfterUptime = TimeSpan.Zero;
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (mode == "background")
+                new Thread(() => throw new InvalidOperationException("Crash test (background thread)")).Start();
+            else
+                throw new InvalidOperationException("Crash test (app thread)");
+        };
+        timer.Start();
     }
 
     private void ShowWelcome()
@@ -184,7 +243,8 @@ public partial class App : Application
     /// paste them into. They hold folder paths (which can include the user's name), so they go only
     /// on the clipboard, for the user to look over, and never into the web address.
     /// </summary>
-    private async void ReportBug()
+    /// <param name="crash">A crash to report: its details go first on the clipboard, and its kind (not its message, which can hold paths) in the title.</param>
+    private async void ReportBug(CrashReport? crash = null)
     {
         string? report = null;
         try
@@ -196,11 +256,13 @@ public partial class App : Application
             // Never let a failed report take the app down; the issue page still opens.
             Log.Write($"Couldn't collect diagnostics for a bug report: {ex.Message}");
         }
+        if (crash != null)
+            report = crash.Text + Environment.NewLine + (report ?? "");
         // Back on the app's thread, which the clipboard and the tray need, whichever thread the await resumed on.
-        Dispatcher.Invoke(() => OpenBugReport(report));
+        Dispatcher.Invoke(() => OpenBugReport(report, crash));
     }
 
-    private void OpenBugReport(string? report)
+    private void OpenBugReport(string? report, CrashReport? crash)
     {
         bool copied = false;
         if (report != null)
@@ -226,6 +288,8 @@ public partial class App : Application
                 : "Open Settings → About → Copy diagnostics, then paste them here.\n\n") +
             "```\n\n```\n";
         string url = $"https://github.com/{UpdateChecker.Repository}/issues/new?body={Uri.EscapeDataString(body)}";
+        if (crash != null)
+            url += "&title=" + Uri.EscapeDataString($"Crash: {crash.Kind}");
         try
         {
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
@@ -340,6 +404,7 @@ public partial class App : Application
         _rightClickEnabled = settings.RightClickTrigger;
         _shiftEnabled = settings.ShiftTrigger;
         _wheel?.ApplySettings(settings);
+        Engine.OutputPaths.SaveTo = settings.OutputFolder;
         UpdateHotkey();
         UpdateTrayIcon();
     }
@@ -747,7 +812,7 @@ public partial class App : Application
         _settingsWindow.CheckForUpdatesRequested += OpenUpdates;
         _settingsWindow.TutorialRequested += OpenTutorial;
         _settingsWindow.WelcomeRequested += ShowWelcome;
-        _settingsWindow.BugReportRequested += ReportBug;
+        _settingsWindow.BugReportRequested += () => ReportBug();
         _settingsWindow.Closed += (_, _) =>
         {
             _settingsWindow = null;
@@ -860,7 +925,10 @@ public partial class App : Application
                 }
             }
 
-            Notify(title, body + "\nClick to show.", Forms.ToolTipIcon.Info, openOnClick: succeeded[0].OutputPath);
+            // With Open and Open folder buttons where Windows allows; otherwise the tray's own balloon.
+            string first = succeeded[0].OutputPath!;
+            if (!FinishedToast.TryShow(title, body, first, single: succeeded.Count == 1))
+                Notify(title, body + "\nClick to show.", Forms.ToolTipIcon.Info, openOnClick: first);
         }
         else
         {
@@ -976,6 +1044,32 @@ public partial class App : Application
             action();
             return;
         }
+        ShowInExplorer(target);
+    }
+
+    /// <summary>A button on the "Done" notification (or the notification itself) was clicked.</summary>
+    private void OnFinishedToastAction(string action, string path)
+    {
+        if (action == FinishedToast.Open && File.Exists(path))
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                // No app is set to open this kind of file; showing it is the next best thing.
+                Log.Write($"Couldn't open {path}: {ex.Message}");
+                ShowInExplorer(path);
+            }
+            return;
+        }
+        ShowInExplorer(path);
+    }
+
+    /// <summary>Opens a folder, or File Explorer with a file selected in its folder.</summary>
+    private static void ShowInExplorer(string? target)
+    {
         try
         {
             if (Directory.Exists(target))

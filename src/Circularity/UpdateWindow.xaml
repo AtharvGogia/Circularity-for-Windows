@@ -3,7 +3,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Circularity updates"
-        Width="480" SizeToContent="Height"
+        Width="520" SizeToContent="Height"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
         ThemeMode="System">
@@ -11,10 +11,11 @@
         <TextBlock x:Name="Heading" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" Text="Checking for updates…" />
         <TextBlock x:Name="Detail" Opacity="0.75" Margin="0,6,0,0" TextWrapping="Wrap" />
 
-        <Border x:Name="NotesBox" Visibility="Collapsed" Margin="0,16,0,0" Padding="12" CornerRadius="6"
-                BorderThickness="1" BorderBrush="#40808080" MaxHeight="220">
+        <Border x:Name="NotesBox" Visibility="Collapsed" Margin="0,16,0,0" Padding="14,12,6,12" CornerRadius="6"
+                BorderThickness="1" BorderBrush="#40808080" MaxHeight="300">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <TextBlock x:Name="Notes" TextWrapping="Wrap" />
+                <!-- The release's notes, written in Markdown on GitHub; see MarkdownView. -->
+                <ContentControl x:Name="Notes" Margin="0,0,8,0" Focusable="False" />
             </ScrollViewer>
         </Border>
 

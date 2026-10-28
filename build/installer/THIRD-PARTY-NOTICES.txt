@@ -20,6 +20,9 @@ FFmpeg (ffmpeg.exe)
     Opus                      BSD licence             https://opus-codec.org
     libogg, libvorbis         BSD licence             https://xiph.org
     dav1d (AV1 decoding)      BSD 2-Clause licence    https://code.videolan.org/videolan/dav1d
+    libaom (AVIF encoding)    BSD 2-Clause licence, with the Alliance for Open Media patent
+                              licence (licenses\aom-LICENSE.txt, licenses\aom-PATENTS.txt)
+                                                      https://aomedia.googlesource.com/aom
     libwebp (WebP encoding)   BSD licence             https://chromium.googlesource.com/webm/libwebp
     zlib                      zlib licence            https://zlib.net
 
@@ -72,6 +75,11 @@ SkiaSharp and HarfBuzzSharp (libSkiaSharp.dll, libHarfBuzzSharp.dll)
 Markdig
   Licence: BSD 2-Clause (licenses\Markdig-BSD-2-Clause.txt)
   https://github.com/xoofx/markdig
+
+Windows Community Toolkit: Notifications (Microsoft.Toolkit.Uwp.Notifications), for the
+"Done" notification's buttons
+  Licence: MIT (licenses\WindowsCommunityToolkit-MIT.txt)
+  https://github.com/CommunityToolkit/WindowsCommunityToolkit
 
 Microsoft Edge WebView2 SDK
   Licence: see licenses\WebView2-LICENSE.txt and licenses\WebView2-NOTICE.txt

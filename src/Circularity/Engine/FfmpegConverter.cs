@@ -42,6 +42,7 @@ internal sealed partial class FfmpegConverter : IConverter
         bool Has(string encoder) => Regex.IsMatch(encoders, $@"\s{Regex.Escape(encoder)}\s");
         UsesWindowsH264 = _ffmpegPath != null && !Has("libx264");
         CanEncodeWebp = Has("libwebp");
+        CanEncodeAvif = Has("libaom-av1");
         _h264 = (UsesWindowsH264 ? WindowsH264 : X264).Concat(Aac).ToArray();
         _argsByTarget = new()
         {
@@ -67,6 +68,34 @@ internal sealed partial class FfmpegConverter : IConverter
     /// <summary>Whether this FFmpeg can write WebP images (used by <see cref="ImageConverter"/>).</summary>
     public bool CanEncodeWebp { get; }
 
+    /// <summary>Whether this FFmpeg can write AVIF images (libaom), used by <see cref="ImageConverter"/>.</summary>
+    public bool CanEncodeAvif { get; }
+
+    /// <summary>
+    /// Encodes an image (the image converter hands it a PNG) to AVIF as a single still picture. A
+    /// see-through image keeps its transparency as AVIF's separate alpha picture.
+    /// </summary>
+    public Task EncodeAvifAsync(string inputPath, string outputPath, bool hasAlpha, CancellationToken cancellationToken)
+    {
+        // Constant quality (CRF 30 is visually close to the original at a fraction of a JPG's size),
+        // with a speed setting that keeps a phone photo to a few seconds.
+        var quality = new[] { "-c:v", "libaom-av1", "-still-picture", "1", "-crf", "30", "-b:v", "0", "-cpu-used", "6", "-row-mt", "1" };
+        var args = new List<string> { "-i", inputPath };
+        if (hasAlpha)
+        {
+            args.AddRange(new[] { "-filter_complex", "[0:v]format=yuva444p,split[colour][a];[a]alphaextract[alpha]", "-map", "[colour]", "-map", "[alpha]" });
+            args.AddRange(quality);
+            args.AddRange(new[] { "-pix_fmt:0", "yuv444p", "-pix_fmt:1", "gray" });
+        }
+        else
+        {
+            args.AddRange(quality);
+            args.AddRange(new[] { "-pix_fmt", "yuv420p" });
+        }
+        args.Add(outputPath);
+        return RunFfmpegAsync(args, null, cancellationToken);
+    }
+
     /// <summary>Encodes an image FFmpeg can read (the image converter hands it a PNG) to WebP.</summary>
     public Task EncodeWebpAsync(string inputPath, string outputPath, CancellationToken cancellationToken) =>
         RunFfmpegAsync(new[] { "-i", inputPath, "-c:v", "libwebp", "-quality", "85", outputPath }, null, cancellationToken);
@@ -76,10 +105,15 @@ internal sealed partial class FfmpegConverter : IConverter
     /// HEIC without the HEVC extension, or AVIF. FFmpeg reads HEIC's tiled grids and rotation itself.
     /// Blocking, since it's called from the image converter's own thread; images take well under a second.
     /// </summary>
-    public void DecodeImageToPng(string inputPath, string pngPath)
+    /// <param name="mergeAlpha">The file is an AVIF with a separate alpha picture (see <see cref="HasAlphaPicture"/>) to put back.</param>
+    public void DecodeImageToPng(string inputPath, string pngPath, bool mergeAlpha = false)
     {
         var startInfo = new ProcessStartInfo(RequireFfmpeg()) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
-        foreach (string arg in new[] { "-hide_banner", "-nostdin", "-v", "error", "-y", "-i", inputPath, "-frames:v", "1", pngPath })
+        var args = new List<string> { "-hide_banner", "-nostdin", "-v", "error", "-y", "-i", inputPath };
+        if (mergeAlpha)
+            args.AddRange(new[] { "-filter_complex", "[0:v:0][0:v:1]alphamerge" });
+        args.AddRange(new[] { "-frames:v", "1", pngPath });
+        foreach (string arg in args)
             startInfo.ArgumentList.Add(arg);
         using var process = Process.Start(startInfo)!;
         string errors = process.StandardError.ReadToEnd();
@@ -90,6 +124,32 @@ internal sealed partial class FfmpegConverter : IConverter
         }
         if (process.ExitCode != 0 || !File.Exists(pngPath) || new FileInfo(pngPath).Length == 0)
             throw new InvalidOperationException(errors.Trim().Split('\n').LastOrDefault()?.Trim() ?? "FFmpeg couldn't read it.");
+    }
+
+    /// <summary>
+    /// Whether an AVIF keeps its transparency as a second, "Alpha" picture, as AVIF does. Windows'
+    /// decoder and a plain FFmpeg decode both read only the colour picture, so these need
+    /// <see cref="DecodeImageToPng"/> with mergeAlpha to stay see-through.
+    /// </summary>
+    public bool HasAlphaPicture(string path)
+    {
+        if (_ffmpegPath == null)
+            return false;
+        try
+        {
+            var startInfo = new ProcessStartInfo(_ffmpegPath) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
+            foreach (string arg in new[] { "-hide_banner", "-nostdin", "-i", path })
+                startInfo.ArgumentList.Add(arg);
+            using var process = Process.Start(startInfo)!;
+            string info = process.StandardError.ReadToEnd();
+            process.WaitForExit(10_000);
+            // "Stream #0:1[0x2]: Video: av1 ..., gray(...)" with "title : Alpha" under it.
+            return Regex.IsMatch(info, @"Stream #0:1\S*: Video: .*gray") || Regex.IsMatch(info, @"title\s*:\s*Alpha");
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     /// <summary>The output of "ffmpeg -encoders", or "" if it can't be run.</summary>
@@ -311,6 +371,8 @@ internal sealed partial class FfmpegConverter : IConverter
     /// <summary>
     /// Re-encodes a video to H.264 at the planned bitrate. For a target size, it checks the result and
     /// tries again a little lower if the encoder overshot, since bitrate control is never exact.
+    /// Windows' encoder won't go below its own idea of the least quality, however low the bitrate, so
+    /// with it each retry also makes the picture smaller, in proportion to the overshoot.
     /// </summary>
     private async Task CompressVideoAsync(string inputPath, CompressSpec spec, string outputPath, IProgress<double> progress, CancellationToken cancellationToken)
     {
@@ -319,10 +381,11 @@ internal sealed partial class FfmpegConverter : IConverter
             throw new InvalidOperationException("That file has no video to compress.");
         var plan = PlanCompression(info, spec);
         long videoBits = plan.VideoBitsPerSecond;
+        int width = plan.Width, height = plan.Height;
 
         for (int attempt = 0; ; attempt++)
         {
-            var args = new List<string> { "-i", inputPath, "-vf", $"scale={plan.Width}:{plan.Height}" };
+            var args = new List<string> { "-i", inputPath, "-vf", $"scale={width}:{height}" };
             args.AddRange(UsesWindowsH264
                 ? new[] { "-c:v", "h264_mf", "-rate_control", "pc_vbr", "-b:v", Bits(videoBits), "-pix_fmt", "nv12" }
                 : new[] { "-c:v", "libx264", "-preset", "medium", "-b:v", Bits(videoBits), "-maxrate", Bits(videoBits * 3 / 2), "-bufsize", Bits(videoBits * 2), "-pix_fmt", "yuv420p" });
@@ -334,9 +397,16 @@ internal sealed partial class FfmpegConverter : IConverter
             long size = new FileInfo(outputPath).Length;
             if (spec.MaxBytes is not long maxBytes || size <= maxBytes)
                 return;
-            if (attempt == 2)
+            if (attempt == 3)
                 throw new InvalidOperationException($"Couldn't get the video under {FileSizes.Format(maxBytes)} (it came out at {FileSizes.Format(size)}).");
-            videoBits = Math.Max(40_000, (long)(videoBits * (double)maxBytes / size * 0.92));
+            double ratio = (double)maxBytes / size * 0.92;
+            videoBits = Math.Max(40_000, (long)(videoBits * ratio));
+            if (UsesWindowsH264 && width > 160)
+            {
+                // Size goes roughly with the number of pixels, so each side shrinks by the square root.
+                width = Math.Max(160, (int)(width * Math.Sqrt(ratio)) / 2 * 2);
+                height = Math.Max(2, (int)Math.Round(plan.Height * (double)width / plan.Width / 2) * 2);
+            }
         }
     }
 

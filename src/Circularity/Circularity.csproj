@@ -31,7 +31,9 @@
     <Copyright>© 2026 Atharv Gogia</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/AtharvGogia/Circularity-for-Windows</RepositoryUrl>
-    <Version>0.4.1</Version>
+    <Version>0.5.0</Version>
+    <!-- For HeifWriter's one direct COM call (the HEIC quality setting). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Keep the version plain (e.g. "0.2.0") instead of appending the git commit id. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
@@ -42,6 +44,7 @@
 
   <ItemGroup>
     <PackageReference Include="Markdig" Version="1.5.0" />
+    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <PackageReference Include="PdfPig" Version="0.1.16" />
     <!-- PDFium (the PDF engine in Chrome), prebuilt: renders PDF pages to images on the CPU. -->
@@ -54,8 +57,7 @@
        debugging Skia itself, so they're left out of the published app. -->
   <Target Name="LeaveOutNativeDebugSymbols" AfterTargets="ComputeResolvedFilesToPublishList">
     <ItemGroup>
-      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
-                             Condition="'%(Extension)' == '.pdb' and ($([System.String]::Copy('%(Filename)').StartsWith('libSkiaSharp')) or $([System.String]::Copy('%(Filename)').StartsWith('libHarfBuzzSharp')))" />
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.pdb' and ($([System.String]::Copy('%(Filename)').StartsWith('libSkiaSharp')) or $([System.String]::Copy('%(Filename)').StartsWith('libHarfBuzzSharp')))" />
     </ItemGroup>
   </Target>
 

@@ -71,9 +71,12 @@ A tray app that:
    files, opens Settings), so these never start a second copy.
 4. Runs the job in the background:
    - **Images** → PNG, JPG, BMP, GIF, TIFF (Windows Imaging Component), WebP (decoded by Windows,
-     encoded by FFmpeg's libwebp), PDF. **iPhone HEIC/HEIF photos and AVIF** are read too: by
-     Windows when it has the codec, otherwise by the bundled FFmpeg, so they work without buying
-     Microsoft's HEVC extension. Photos taken sideways come out the right way up.
+     encoded by FFmpeg's libwebp), PDF, **AVIF** (encoded by FFmpeg's libaom, keeping transparency)
+     and **HEIC** (by Windows' own HEIF encoder, so only on PCs with Microsoft's HEVC extension,
+     which many have preinstalled; elsewhere the button doesn't appear). **iPhone HEIC/HEIF photos
+     and AVIF** are read everywhere: by Windows when it has the codec, otherwise by the bundled
+     FFmpeg, so reading them doesn't need the HEVC extension. Photos taken sideways come out the
+     right way up.
      **SVG** files are read and drawn with Svg.Skia, keeping transparency. Being vector, small ones
      (icons) come out at 1024 px rather than at their tiny nominal size, and huge ones at most
      4096 px. Anything an SVG links to outside itself (web pictures, fonts, styles, other files) is
@@ -120,14 +123,22 @@ A tray app that:
      "1920×1080" or "Under 25 MB"). These run straight away, without the window. A compression
      button only appears for the kind of file it was made for (a video one for videos, and so on).
 
-Results are saved as new copies next to the original: `photo.png`, `photo (resized).jpg`,
-`photo (cropped).jpg`, `photo (compressed).jpg`, `scan (combined).pdf`, with ` (1)`, ` (2)`... if the name is taken. The original is never touched:
-the wheel always answers the drag with "Copy", never "Move".
+Results are saved as new copies next to the original (or in a folder you choose in Settings →
+Features): `photo.png`, `photo (resized).jpg`, `photo (cropped).jpg`, `photo (compressed).jpg`,
+`scan (combined).pdf`, with ` (1)`, ` (2)`... if the name is taken. If the chosen folder isn't
+there (an unplugged drive, say), the result goes next to the original instead. The original is never
+touched: the wheel always answers the drag with "Copy", never "Move".
 
 While something is running, hover the tray icon to see progress
 (`clip.mov → MP4 43% (+2 more)`). **Cancel conversions** in its menu stops everything. A cancelled or
-failed job leaves no half-written file behind. You get one notification per drop; clicking it shows
-the result in File Explorer.
+failed job leaves no half-written file behind. You get one notification per drop, with **Open** (the
+file, in its usual app) and **Open folder** buttons; clicking the notification itself shows the result
+in File Explorer.
+
+If something goes wrong that nothing else caught, Circularity keeps running, saves a crash report
+(`%LOCALAPPDATA%\Circularity\crashes`) and offers, in a notification, to report it. If the error is
+one that ends the program, it starts itself again (unless it had only just started, so a broken start
+can't loop) and offers the report then.
 
 The first time Circularity starts, a short welcome explains the gestures. For everything else there's
 a **tutorial** built in: thirteen chapters, from opening the wheel to every format and tool, your own
@@ -151,7 +162,8 @@ Settings is live: hover and click it, and switch it between image, video, audio 
   **notifications** when conversions finish and when Circularity starts (problems always show), and
   **start at sign-in**: the same Windows sign-in entry the installer's checkbox creates, so the two
   always agree; it also notices (and, when ticked, undoes) "Disabled" in Task Manager's Startup apps
-- **Features**: **copy converted files to the clipboard** when conversions finish (the files
+- **Features**: where to **save converted files** (next to the original, or a folder you choose),
+  **copy converted files to the clipboard** when conversions finish (the files
   themselves, like Ctrl+C in File Explorer, so you can paste them into another folder or app), and
   **check for updates automatically**, off by default: when Circularity starts, or every day, 3
   days, week or 30 days. A new version is mentioned once, in a notification that opens the
@@ -176,8 +188,8 @@ It produces, in `artifacts\`:
 
 | Output | What it is | Size |
 | --- | --- | --- |
-| `artifacts\CircularitySetup-x.y.z.exe` | The installer to hand out | ~72 MB |
-| `artifacts\Circularity\Circularity.exe` | The app itself, in a self-contained folder that also runs without installing (e.g. from a USB stick) | ~240 MB folder |
+| `artifacts\CircularitySetup-x.y.z.exe` | The installer to hand out | ~74 MB |
+| `artifacts\Circularity\Circularity.exe` | The app itself, in a self-contained folder that also runs without installing (e.g. from a USB stick) | ~250 MB folder |
 
 The installer:
 
@@ -207,9 +219,11 @@ winget install MSYS2.MSYS2
 
 MSYS2 is only needed to compile FFmpeg, which happens once (a few minutes) and is reused after
 that; `build\build.ps1 -RebuildFfmpeg` forces a fresh one. That FFmpeg (`build\ffmpeg\build-ffmpeg.sh`)
-is a slim LGPL build, 29 MB instead of the usual 230 MB: only the encoders, containers and filters
-Circularity uses, every decoder so it still reads almost anything, and H.264 encoding through
-Windows' built-in encoder instead of the GPL x264. It needs only DLLs that come with Windows.
+is a slim LGPL build, 38 MB instead of the usual 230 MB: only the encoders, containers and filters
+Circularity uses (including libaom, BSD-licensed, for AVIF), every decoder so it still reads almost
+anything, and H.264 encoding through Windows' built-in encoder instead of the GPL x264. Windows'
+encoder won't go below its own idea of the least quality, so compressing a video to a size it can't
+reach that way makes the picture smaller instead. It needs only DLLs that come with Windows.
 Licences for everything bundled are in `build\installer` and ship in the app's `licenses` folder,
 listed in `THIRD-PARTY-NOTICES.txt`.
 
@@ -279,6 +293,12 @@ regenerates the app icon.
 The README's header (`docs/media/header.svg` and `header-dark.svg`) is the logo with "Circularity"
 set in Poppins SemiBold, the letters stored as outlines so it looks the same without the font.
 
+`--crash-test` runs the app and makes it fail on purpose, on its own thread (it should carry on and
+save a report) and on another (it should save a report, end, start itself again and offer the
+report); close Circularity first. `--notification-test` shows the real "Done" notification, presses
+its Open folder button (through UI Automation, or, on a locked PC, the way Windows does) and checks the
+click arrives, then that unregistering leaves nothing in the registry.
+
 `--startup-test` checks the start-at-sign-in toggle against the real registry, then restores
 whatever was there before.
 
@@ -290,8 +310,9 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
   browsers and mail apps, see `App.xaml.cs`) and nothing full-screen is running.
 - Dragging from an app running as administrator won't drop onto the wheel; Windows blocks
   drops from elevated apps into normal ones.
-- HEIC, HEIF and AVIF can be read but not written, so resizing or cropping them produces a JPG.
-  Without Microsoft's image extensions they're decoded by FFmpeg, which takes a moment longer.
+- Saving as HEIC needs Microsoft's HEVC extension (Windows' HEIF encoder uses it). On PCs without it
+  there's no HEIC button, and resizing or cropping a HEIC produces a JPG. Reading HEIC and AVIF
+  without Microsoft's image extensions goes through FFmpeg, which takes a moment longer.
 - iPhone videos filmed in HDR can come out with paler colours when converted, since the bundled
   FFmpeg has no HDR-to-SDR tone mapping.
 - Animated GIFs are edited as their first frame only.
@@ -330,6 +351,8 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 | `Engine/OutputPaths.cs` | Picks a free output name (or folder) next to the original and reserves it. |
 | `Theme.cs` | Light / dark / same-as-Windows, for the wheel and the windows. |
 | `InstanceChannel.cs` | One running copy; later launches hand their files over a private named pipe. |
+| `CrashGuard.cs` | The safety net: saves crash reports, keeps going where it can, restarts after a fatal error. |
+| `FinishedToast.cs` | The "Done" notification with Open and Open folder buttons. |
 | `GlobalHotkey.cs` / `ExplorerSelection.cs` | Ctrl+Alt+C, and reading the selected files from Explorer or the desktop. |
 | `WelcomeWindow.xaml(.cs)` | The first-run welcome. |
 | `TutorialWindow.xaml(.cs)` | The full tutorial: chapters, a wheel to try, and a practice picture. |

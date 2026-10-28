@@ -33,6 +33,10 @@ internal static class Program
             return InteractionTest.Run();
         if (args.Length == 2 && args[0] == "--render-readme-media")
             return ReadmeMedia.Render(args[1]);
+        if (args.Length == 1 && args[0] == "--notification-test")
+            return NotificationTest.Run();
+        if (args.Length >= 1 && args[0] == "--crash-test")
+            return CrashTest.Run(args.Length > 1 ? args[1] : null);
         if (args.Length >= 1 && args[0] == "--update-test")
             return await UpdateTest.Run(args.Length > 1 ? args[1] : null);
         if (args.Length == 2 && args[0] == "--write-icon")
@@ -118,6 +122,8 @@ internal static class Program
             await AppleFormatChecks(queue, ffmpeg.FfmpegPath, dir);
             await CompressAndTrimChecks(queue, ffmpeg, dir, longVideo, audio, photo);
             await SvgChecks(queue, dir);
+            await OutputFolderChecks(queue, dir, image);
+            await HeicAvifOutputChecks(queue, ffmpeg, dir, photo);
 
             // The updater reads release tags with three or four numbers, and orders them properly.
             Version Tag(string tag) => UpdateChecker.TryParseVersion(tag, out var v) ? v : new Version(0, 0, 0, 0);
@@ -678,7 +684,7 @@ internal static class Program
             $"ring: {string.Join(" ", ring.Select(i => i >= 0 ? photo[i].Label : "More"))}; arc: {string.Join(" ", arc.Select(i => photo[i].Label))}");
 
         var all = Formats.AllButtonsFor(FileKind.Image, new Settings());
-        Check("settings list every image button", all.Count(a => a.Kind == WheelActionKind.Convert) == 7 && all.Any(a => a.Kind == WheelActionKind.Combine),
+        Check("settings list every image button", all.Count(a => a.Kind == WheelActionKind.Convert) == 9 && all.Any(a => a.Kind == WheelActionKind.Combine),
             string.Join(" ", all.Select(a => a.Label)));
 
         // Settings survive a save and load, presets and layouts included.
@@ -710,6 +716,154 @@ internal static class Program
     {
         using var document = UglyToad.PdfPig.PdfDocument.Open(path);
         return string.Join(" ", document.GetPages().Select(p => p.Text));
+    }
+
+    /// <summary>
+    /// Saving as AVIF (FFmpeg's libaom, so on every PC with this FFmpeg) and HEIC (Windows' HEIF
+    /// encoder, only where the PC has the HEVC extension: skipped elsewhere, and the button hidden).
+    /// </summary>
+    private static async Task HeicAvifOutputChecks(ConversionQueue queue, FfmpegConverter ffmpeg, string dir, string photo)
+    {
+        async Task<ConversionJob> Do(string file, Operation operation) => (await Run(queue, new[] { file }, operation)).Jobs[0];
+        string Describe(ConversionJob job) => job.State == JobState.Succeeded
+            ? $"{Path.GetFileName(job.OutputPath)} {ImageConverter.ReadSize(job.OutputPath!).Width}×{ImageConverter.ReadSize(job.OutputPath!).Height}, {FileSizes.Format(new FileInfo(job.OutputPath!).Length)}"
+            : $"{job.State}: {job.Error}";
+        bool Good(ConversionJob job, string ext, (int, int) size) =>
+            job.State == JobState.Succeeded && job.OutputPath!.EndsWith("." + ext) && IsReadable(ffmpeg.FfmpegPath!, job.OutputPath!) && ImageConverter.ReadSize(job.OutputPath!) == size;
+        var photoSize = ImageConverter.ReadSize(photo);
+
+        // A 120×80 picture, its left half see-through, to check transparency survives.
+        string glass = Path.Combine(dir, "glass.png");
+        {
+            var pixels = new byte[120 * 80 * 4];
+            for (int i = 0; i < pixels.Length; i += 4)
+            {
+                bool left = (i / 4) % 120 < 60;
+                pixels[i] = 200; pixels[i + 1] = 80; pixels[i + 2] = 30; pixels[i + 3] = left ? (byte)0 : (byte)255;
+            }
+            var source = System.Windows.Media.Imaging.BitmapSource.Create(120, 80, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null, pixels, 120 * 4);
+            var png = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(source));
+            using var stream = File.Create(glass);
+            png.Save(stream);
+        }
+        // Whether the decoded picture is see-through on the left and solid on the right.
+        bool KeepsAlpha(string path)
+        {
+            var image = new System.Windows.Media.Imaging.FormatConvertedBitmap(ImageConverter.LoadOriented(path), System.Windows.Media.PixelFormats.Bgra32, null, 0);
+            var row = new byte[image.PixelWidth * 4];
+            image.CopyPixels(new System.Windows.Int32Rect(0, image.PixelHeight / 2, image.PixelWidth, 1), row, row.Length, 0);
+            return row[10 * 4 + 3] < 30 && row[(image.PixelWidth - 10) * 4 + 3] > 225;
+        }
+        // Whether the (once see-through) left side came out white.
+        bool IsWhiteOnLeft(string path)
+        {
+            var image = new System.Windows.Media.Imaging.FormatConvertedBitmap(ImageConverter.LoadOriented(path), System.Windows.Media.PixelFormats.Bgra32, null, 0);
+            var row = new byte[image.PixelWidth * 4];
+            image.CopyPixels(new System.Windows.Int32Rect(0, image.PixelHeight / 2, image.PixelWidth, 1), row, row.Length, 0);
+            return row[10 * 4] > 235 && row[10 * 4 + 1] > 235 && row[10 * 4 + 2] > 235;
+        }
+
+        var buttons = Formats.ActionsFor(new[] { "photo.png" }, queue.CanHandle).Actions.Select(a => a.Label).ToList();
+        Check("a PNG is offered AVIF", buttons.Contains("AVIF"), string.Join(" ", buttons));
+
+        if (!ffmpeg.CanEncodeAvif)
+        {
+            Check("this FFmpeg can write AVIF (libaom)", false, ffmpeg.FfmpegPath ?? "");
+        }
+        else
+        {
+            var avif = await Do(photo, new ConvertTo("avif"));
+            Check("png -> avif", Good(avif, "avif", photoSize), Describe(avif));
+            var avifAlpha = await Do(glass, new ConvertTo("avif"));
+            Check("avif keeps transparency", avifAlpha.State == JobState.Succeeded && KeepsAlpha(avifAlpha.OutputPath!), Describe(avifAlpha));
+            var avifResized = await Do(avif.OutputPath!, new ResizeTo(new ResizeSpec(ResizeKind.Fit, 300, 300)));
+            Check("a resized avif stays avif", avifResized.State == JobState.Succeeded && avifResized.OutputPath!.EndsWith(".avif"), Describe(avifResized));
+        }
+
+        if (!queue.CanHandle(photo, new ConvertTo("heic")))
+        {
+            Console.WriteLine("skip HEIC saving: this PC doesn't have Microsoft's HEVC extension");
+        }
+        else
+        {
+            Check("a PNG is offered HEIC here", buttons.Contains("HEIC"), string.Join(" ", buttons));
+            var heic = await Do(photo, new ConvertTo("heic"));
+            Check("png -> heic", Good(heic, "heic", photoSize), Describe(heic));
+            // On a real photo (the noisy test pattern above is a worst case for every codec).
+            var real = await Do(Path.Combine(dir, "upright.heic"), new ConvertTo("png"));
+            var realHeic = await Do(real.OutputPath!, new ConvertTo("heic"));
+            var realJpg = await Do(real.OutputPath!, new ConvertTo("jpg"));
+            Check("a heic of a real photo is smaller than a jpg of it",
+                realHeic.State == JobState.Succeeded && realJpg.State == JobState.Succeeded && new FileInfo(realHeic.OutputPath!).Length < new FileInfo(realJpg.OutputPath!).Length,
+                $"heic {Describe(realHeic)}; jpg {Describe(realJpg)}");
+            var heicAlpha = await Do(glass, new ConvertTo("heic"));
+            Check("heic puts see-through areas on white (like jpg)", heicAlpha.State == JobState.Succeeded && IsWhiteOnLeft(heicAlpha.OutputPath!), Describe(heicAlpha));
+            var heicCropped = await Do(heic.OutputPath!, new CropTo(new PixelRect(0, 0, 100, 100)));
+            Check("a cropped heic stays heic", heicCropped.State == JobState.Succeeded && heicCropped.OutputPath!.EndsWith(".heic"), Describe(heicCropped));
+
+            // A photo this big is stored as a grid of tiles, as iPhones do; without Windows' codec,
+            // FFmpeg has to join them back up.
+            ImageConverter.SkipWindowsDecoder = true;
+            try
+            {
+                var tiled = await Do(heic.OutputPath!, new ConvertTo("png"));
+                Check("a tiled (iPhone-style) heic reads without Windows' codec", tiled.State == JobState.Succeeded && ImageConverter.ReadSize(tiled.OutputPath!) == photoSize, Describe(tiled));
+            }
+            finally
+            {
+                ImageConverter.SkipWindowsDecoder = false;
+            }
+        }
+
+        // As on a PC without the HEVC extension: no HEIC button, and edits to a HEIC come out as JPG.
+        ImageConverter.SkipHeicEncoder = true;
+        try
+        {
+            var without = Formats.ActionsFor(new[] { "photo.png" }, queue.CanHandle).Actions.Select(a => a.Label).ToList();
+            Check("without the HEVC extension, no HEIC button", !without.Contains("HEIC"), string.Join(" ", without));
+            string upright = Path.Combine(dir, "upright.heic");
+            var resized = await Do(upright, new ResizeTo(new ResizeSpec(ResizeKind.Fit, 300, 300)));
+            Check("without it, a resized heic becomes jpg", resized.State == JobState.Succeeded && resized.OutputPath!.EndsWith(".jpg"), Describe(resized));
+        }
+        finally
+        {
+            ImageConverter.SkipHeicEncoder = false;
+        }
+    }
+
+    /// <summary>Settings → "Save converted files in": into the chosen folder, or next to the original when it can't be used.</summary>
+    private static async Task OutputFolderChecks(ConversionQueue queue, string dir, string image)
+    {
+        string chosen = Path.Combine(dir, "Converted files");
+        async Task<ConversionJob> Do(Operation operation) => (await Run(queue, new[] { image }, operation)).Jobs[0];
+        string Where(ConversionJob job) => job.State == JobState.Succeeded ? job.OutputPath! : $"{job.State}: {job.Error}";
+
+        OutputPaths.SaveTo = chosen;
+        try
+        {
+            var first = await Do(new ConvertTo("tiff"));
+            Check("save to a chosen folder (made if it's missing)",
+                first.State == JobState.Succeeded && Path.GetDirectoryName(first.OutputPath) == chosen && File.Exists(first.OutputPath), Where(first));
+            var second = await Do(new ConvertTo("tiff"));
+            Check("the chosen folder never overwrites: pic (1).tiff", Path.GetFileName(second.OutputPath) == "pic (1).tiff" && Path.GetDirectoryName(second.OutputPath) == chosen, Where(second));
+            var resized = await Do(new ResizeTo(new ResizeSpec(ResizeKind.Fit, 50, 50)));
+            Check("edits go to the chosen folder too", Path.GetDirectoryName(resized.OutputPath) == chosen, Where(resized));
+            var pdf = await Do(new ConvertTo("pdf"));
+            Check("so do PDFs", Path.GetDirectoryName(pdf.OutputPath) == chosen, Where(pdf));
+            Check("the chosen folder holds only results (no leftovers from checking it)",
+                Directory.GetFiles(chosen).All(f => !Path.GetFileName(f).StartsWith(".circularity-")), string.Join(", ", Directory.GetFiles(chosen).Select(Path.GetFileName)));
+
+            // A "folder" inside a file can't exist, like a drive that's been unplugged.
+            OutputPaths.SaveTo = Path.Combine(image, "nowhere");
+            var fallback = await Do(new ConvertTo("tiff"));
+            Check("a folder that can't be used falls back to next to the original",
+                fallback.State == JobState.Succeeded && Path.GetDirectoryName(fallback.OutputPath) == dir, Where(fallback));
+        }
+        finally
+        {
+            OutputPaths.SaveTo = null;
+        }
     }
 
     private static async Task<ConversionBatch> Run(ConversionQueue queue, IReadOnlyList<string> files, Operation operation)

@@ -21,7 +21,7 @@ pacman -S --needed --noconfirm \
     mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf \
     mingw-w64-ucrt-x86_64-zlib mingw-w64-ucrt-x86_64-libvpx mingw-w64-ucrt-x86_64-lame \
     mingw-w64-ucrt-x86_64-opus mingw-w64-ucrt-x86_64-libogg mingw-w64-ucrt-x86_64-libvorbis \
-    mingw-w64-ucrt-x86_64-dav1d mingw-w64-ucrt-x86_64-libwebp
+    mingw-w64-ucrt-x86_64-dav1d mingw-w64-ucrt-x86_64-libwebp mingw-w64-ucrt-x86_64-aom
 
 mkdir -p "$WORK"
 cd "$WORK"
@@ -44,15 +44,22 @@ echo "==> Configuring"
     `# The Media Foundation (Windows) encoders are built against Direct3D 11; d3d11.dll is part of Windows.` \
     --enable-d3d11va \
     --enable-libvpx --enable-libmp3lame --enable-libopus --enable-libvorbis --enable-libdav1d --enable-libwebp \
+    `# libaom (BSD) writes AVIF pictures; dav1d already reads AV1, so libaom's own decoder is left out.` \
+    --enable-libaom --disable-decoder=libaom_av1 \
     --disable-encoders \
-    --enable-encoder=h264_mf,aac,libmp3lame,flac,pcm_s16le,libvorbis,libopus,libvpx_vp9,gif,png,libwebp \
+    --enable-encoder=h264_mf,aac,libmp3lame,flac,pcm_s16le,libvorbis,libopus,libvpx_vp9,gif,png,libwebp,libaom_av1 \
     `# wrapped_avframe lets "-f null" decode a file end to end, which is how outputs are checked.` \
     --enable-encoder=wrapped_avframe \
     --disable-muxers \
-    --enable-muxer=mp4,mov,ipod,matroska,webm,gif,mp3,wav,flac,ogg,image2,webp,null \
+    --enable-muxer=mp4,mov,ipod,matroska,webm,gif,mp3,wav,flac,ogg,image2,webp,avif,null \
     --disable-filters \
     --enable-filter=scale,crop,fps,split,palettegen,paletteuse,format,aformat,aresample,null,anull \
     --enable-filter=setsar,setpts,asetpts,transpose,hflip,vflip,buffer,abuffer,buffersink,abuffersink \
+    `# alphaextract splits a see-through picture's transparency into AVIF's separate alpha picture,` \
+    `# and alphamerge puts it back when reading one.` \
+    --enable-filter=alphaextract,alphamerge \
+    `# xstack joins the tiles of a gridded HEIC/AVIF (every iPhone photo) back into one picture.` \
+    --enable-filter=xstack \
     --enable-filter=testsrc,testsrc2,sine,noise \
     --disable-devices --enable-indev=lavfi \
     --disable-protocols --enable-protocol=file,pipe
@@ -69,7 +76,7 @@ cp "$BUILD_OUT/bin/ffmpeg.exe" "$OUT/bin/"
 # Licence texts that must ship alongside the binary. MSYS2 only packages some of them; the rest
 # (libvpx, LAME, libvorbis, zlib, libwebp) are kept in build/installer/licenses.
 cp COPYING.LGPLv2.1 "$OUT/licenses/FFmpeg-LGPL-2.1.txt"
-for pkg in opus libogg dav1d; do
+for pkg in opus libogg dav1d aom; do
     src="/ucrt64/share/licenses/$pkg"
     if [ -d "$src" ]; then
         for f in "$src"/*; do cp "$f" "$OUT/licenses/$pkg-$(basename "$f").txt"; done

@@ -178,7 +178,7 @@ internal partial class TutorialWindow : Window
     private FrameworkElement Formats_() => Page("What it converts",
         Para("The wheel only shows what makes sense for the file you're dropping. Here's everything it can do."),
         Heading("Images"),
-        Para("To **PNG, JPG, BMP, GIF, TIFF, WebP** and **PDF**. It also reads **iPhone HEIC/HEIF photos, AVIF** and **SVG**, even without Microsoft's paid HEVC extension. Photos taken sideways come out the right way up. SVGs keep their transparency; small ones (icons) come out at 1024 px rather than their tiny nominal size, and anything an SVG links to outside itself is ignored, so converting one never goes online."),
+        Para("To **PNG, JPG, BMP, GIF, TIFF, WebP, AVIF** and **PDF**, and to **HEIC** on PCs with Microsoft's HEVC extension (many have it already; without it, there's no HEIC button). It reads **iPhone HEIC/HEIF photos, AVIF** and **SVG** on every PC, even without that extension. Photos taken sideways come out the right way up. SVGs keep their transparency; small ones (icons) come out at 1024 px rather than their tiny nominal size, and anything an SVG links to outside itself is ignored, so converting one never goes online."),
         Heading("Video"),
         Para("To **MP4, WebM, MOV, GIF** and **MP3** (just the sound). It reads iPhone HEVC and ProRes videos too."),
         Heading("Audio"),
@@ -194,7 +194,7 @@ internal partial class TutorialWindow : Window
             "**Excel** (XLSX, XLS, ODS, CSV) → PDF",
             "**PowerPoint** (PPTX, PPT, ODP) → PDF"),
         Para("Office runs invisibly. If you already had that Office app open, your copy is used and left open. Without Office, these buttons simply don't appear."),
-        Tip("HEIC and AVIF are read-only", "Circularity can open them but not save them, so resizing or cropping one gives you a JPG."));
+        Tip("Edits keep the format", "Resizing or cropping an AVIF gives an AVIF, and a HEIC stays HEIC where the PC can save it (otherwise it becomes a JPG). See-through parts stay see-through in AVIF and PNG."));
 
     private FrameworkElement ResizeAndCrop() => Page("Resize and crop",
         Para("These work on **images and videos**, and open a small window before anything happens."),
@@ -265,10 +265,10 @@ internal partial class TutorialWindow : Window
         Bullets(
             "Conversions run **in the background**, two at a time, so you can keep working.",
             "**Hover the tray icon** to see progress, for example **clip.mov → MP4 43% (+2 more)**.",
-            "You get **one notification per drop** when it's done. **Click it** to see the new file in File Explorer.",
+            "You get **one notification per drop** when it's done. **Open** opens the new file in its usual app, and **Open folder** (or clicking the notification) shows it in File Explorer.",
             "**Right-click the tray icon → Cancel conversions** stops everything. A cancelled or failed conversion never leaves a half-written file behind."),
         Heading("Where files go"),
-        Para("Next to the original, with a name that says what happened:"),
+        Para("Next to the original, or in a folder you choose in **Settings → Features** (if that folder isn't there, say on an unplugged drive, the file goes next to the original instead). The name says what happened:"),
         Table(
             ("Converted", "photo.png"),
             ("Resized", "photo (resized).jpg"),
@@ -298,7 +298,7 @@ internal partial class TutorialWindow : Window
             ("Wheel", "Theme (same as Windows, light or dark), size, background opacity and accent colour. The tray icon follows the colour."),
             ("Buttons", "The order of the buttons for each kind of file, and which ones are hidden."),
             ("General", "Which gestures are on (right-click, Shift, Ctrl+Alt+C), notifications, and starting when you sign in to Windows."),
-            ("Features", "Copying converted files to the clipboard, and checking for updates automatically."),
+            ("Features", "Where converted files are saved, copying them to the clipboard, and checking for updates automatically."),
             ("Help", "This tutorial, the welcome guide, and Report a bug."),
             ("About", "What Circularity found on this PC, and Copy diagnostics for bug reports.")),
         OpenSettingsButton());
@@ -322,6 +322,8 @@ internal partial class TutorialWindow : Window
             "HEIC and AVIF can be read but not saved. Without Microsoft's image extensions they take a moment longer to open.",
             "iPhone videos filmed in **HDR** can come out with paler colours.",
             "**PDF → Word** isn't offered, because Word asks a question first that an invisible Word can't answer."),
+        Heading("If Circularity runs into an error"),
+        Para("It keeps going where it can and shows a notification: **click it** to report what happened. If the error closes it, it **starts again by itself** and offers the report then. Crash reports are kept in **%LOCALAPPDATA%\\Circularity\\crashes**."),
         Heading("Reporting a problem"),
         Para("Right-click the tray icon → **Help → Report a bug** (or use the button in **Settings → Help**). It opens a new bug report on GitHub and copies what Circularity found on this PC, with the end of its log, to the clipboard: press **Ctrl+V** in the report to paste it. It includes folder paths from your PC, so look it over before you send it."),
         Para("To copy the same details without opening a report, use **Copy diagnostics** in **Settings → About**."),

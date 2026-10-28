@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -15,12 +16,25 @@ namespace Circularity.Engine;
 /// <summary>
 /// Image conversion, resizing, cropping and compression using the Windows Imaging Component (via WPF).
 /// Reads anything WIC has a codec for, SVG (drawn with Svg.Skia), and anything else FFmpeg can read
-/// (HEIC on PCs without the HEVC extension, AVIF without the AV1 one); writes PNG, JPG, BMP, GIF and TIFF itself, and WebP by
-/// handing a PNG to FFmpeg (libwebp) when it has that encoder.
+/// (HEIC on PCs without the HEVC extension, AVIF without the AV1 one); writes PNG, JPG, BMP, GIF and TIFF itself,
+/// HEIC with Windows' HEIF encoder where the PC has it, and WebP and AVIF by handing a PNG to FFmpeg
+/// (libwebp, libaom) when it has those encoders.
 /// </summary>
 internal sealed class ImageConverter : IConverter
 {
     private static readonly HashSet<string> Writable = new() { "png", "jpg", "bmp", "gif", "tiff" };
+
+    /// <summary>WIC's HEIF container (GUID_ContainerFormatHeif), written with HEVC pictures inside: a .heic file.</summary>
+    private static readonly Guid HeifContainer = new("e1e62521-6787-405b-a339-500715b5763f");
+
+    /// <summary>
+    /// Whether this PC can write HEIC. That takes Microsoft's HEIF and HEVC extensions (the HEVC one
+    /// is preinstalled on many PCs, otherwise from the Store), so it's tried once rather than assumed.
+    /// </summary>
+    private static readonly Lazy<bool> HeifEncoderWorks = new(ProbeHeifEncoder);
+
+    /// <summary>For tests: behave like a PC that can't write HEIC.</summary>
+    internal static bool SkipHeicEncoder { get; set; }
 
     /// <summary>What decodes images Windows can't, for every caller of <see cref="LoadOriented"/>.</summary>
     private static FfmpegConverter? _fallbackDecoder;
@@ -43,12 +57,22 @@ internal sealed class ImageConverter : IConverter
     }
 
     private bool CanWriteWebp => _ffmpeg?.CanEncodeWebp == true;
+    private bool CanWriteAvif => _ffmpeg?.CanEncodeAvif == true;
+    private static bool CanWriteHeic => !SkipHeicEncoder && HeifEncoderWorks.Value;
+
+    /// <summary>Formats written with help (FFmpeg, or a Windows extension), when that help is there.</summary>
+    private bool CanWrite(string format) => format switch
+    {
+        "webp" => CanWriteWebp,
+        "avif" => CanWriteAvif,
+        "heic" => CanWriteHeic,
+        _ => Writable.Contains(format),
+    };
 
     public bool CanHandle(string inputPath, Operation operation) =>
         Formats.KindOf(inputPath) == FileKind.Image && operation switch
         {
-            ConvertTo { Target: "webp" } => CanWriteWebp,
-            ConvertTo convert => Writable.Contains(convert.Target),
+            ConvertTo convert => CanWrite(convert.Target),
             ResizeTo or CropTo or CompressTo => true,
             _ => false,
         };
@@ -61,10 +85,11 @@ internal sealed class ImageConverter : IConverter
         if (operation is CompressTo)
             return "jpg";
 
-        // Edits keep the format when it can be written. HEIC can only be read, so it becomes JPG; icons
-        // and SVGs become PNG, since they're usually see-through in places and JPG can't be.
+        // Edits keep the format when it can be written: a resized HEIC stays HEIC where the PC can
+        // write it, and becomes JPG where it can't. Icons and SVGs become PNG, since they're usually
+        // see-through in places and JPG can't be.
         string ext = Formats.NormalizedExtension(inputPath);
-        if (Writable.Contains(ext) || (ext == "webp" && CanWriteWebp))
+        if (CanWrite(ext))
             return ext;
         return ext is "ico" or "svg" ? "png" : "jpg";
     }
@@ -75,19 +100,22 @@ internal sealed class ImageConverter : IConverter
         cancellationToken.ThrowIfCancellationRequested();
         string format = OutputExtension(inputPath, operation);
 
-        if (format != "webp")
+        if (format is not ("webp" or "avif"))
         {
-            await Sta.Run(() => { Run(inputPath, operation, format, outputPath); return 0; }, "ImageConverter");
+            await Sta.Run(() => Run(inputPath, operation, format, outputPath), "ImageConverter");
         }
         else
         {
-            // WIC can't write WebP: do the work into a lossless PNG, then have FFmpeg encode that.
+            // WIC can't write WebP or AVIF: do the work into a lossless PNG, then have FFmpeg encode that.
             // Decoding stays with WIC so EXIF rotation and every readable format keep working.
             string png = Path.Combine(Path.GetTempPath(), $"Circularity-{Guid.NewGuid():N}.png");
             try
             {
-                await Sta.Run(() => { Run(inputPath, operation, "png", png); return 0; }, "ImageConverter");
-                await _ffmpeg!.EncodeWebpAsync(png, outputPath, cancellationToken);
+                bool hasAlpha = await Sta.Run(() => Run(inputPath, operation, "png", png), "ImageConverter");
+                if (format == "webp")
+                    await _ffmpeg!.EncodeWebpAsync(png, outputPath, cancellationToken);
+                else
+                    await _ffmpeg!.EncodeAvifAsync(png, outputPath, hasAlpha, cancellationToken);
             }
             finally
             {
@@ -99,13 +127,14 @@ internal sealed class ImageConverter : IConverter
         return outputPath;
     }
 
-    private void Run(string inputPath, Operation operation, string format, string outputPath)
+    /// <summary>Does the work and saves it; returns whether the result has see-through pixels.</summary>
+    private static bool Run(string inputPath, Operation operation, string format, string outputPath)
     {
         BitmapSource image = LoadOriented(inputPath);
         if (operation is CompressTo compress)
         {
             File.WriteAllBytes(outputPath, Compress(image, compress.Spec));
-            return;
+            return false;
         }
 
         image = operation switch
@@ -115,6 +144,32 @@ internal sealed class ImageConverter : IConverter
             _ => image,
         };
         Save(image, format, outputPath);
+        return HasAlpha(image);
+    }
+
+    /// <summary>Saves a tiny HEIC in memory, on a thread of its own (WIC wants a single-threaded apartment).</summary>
+    private static bool ProbeHeifEncoder()
+    {
+        bool works = false;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var encoder = BitmapEncoder.Create(HeifContainer);
+                encoder.Frames.Add(BitmapFrame.Create(BitmapSource.Create(16, 16, 96, 96, PixelFormats.Bgr32, null, new byte[16 * 16 * 4], 16 * 4)));
+                using var stream = new MemoryStream();
+                encoder.Save(stream);
+                works = stream.Length > 0;
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"This PC can't write HEIC ({ex.Message}); it needs Microsoft's HEIF and HEVC extensions.");
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        return works;
     }
 
     /// <summary>
@@ -128,9 +183,11 @@ internal sealed class ImageConverter : IConverter
         if (IsSvg(path))
             return LoadSvg(path);
 
+        // A see-through AVIF: Windows would read only its colour, so FFmpeg puts its alpha picture back.
+        bool mergeAlpha = Formats.NormalizedExtension(path) == "avif" && _fallbackDecoder?.HasAlphaPicture(path) == true;
         try
         {
-            if (!SkipWindowsDecoder)
+            if (!SkipWindowsDecoder && !mergeAlpha)
                 return LoadWithWindows(path);
         }
         catch (Exception ex) when (IsUnreadable(ex) && _fallbackDecoder != null)
@@ -143,7 +200,7 @@ internal sealed class ImageConverter : IConverter
         string png = Path.Combine(Path.GetTempPath(), $"Circularity-decoded-{Guid.NewGuid():N}.png");
         try
         {
-            _fallbackDecoder.DecodeImageToPng(path, png);
+            _fallbackDecoder.DecodeImageToPng(path, png, mergeAlpha);
             // FFmpeg has already turned it the right way up, and a PNG has no orientation tag to apply twice.
             return LoadWithWindows(png);
         }
@@ -355,9 +412,24 @@ internal sealed class ImageConverter : IConverter
 
     private static void Save(BitmapSource image, string format, string outputPath)
     {
-        // JPG and BMP have no transparency; put transparent pixels on white instead of black.
-        if (format is "jpg" or "bmp" && HasAlpha(image))
+        // JPG and BMP have no transparency, and Windows' HEIF encoder drops it; put transparent pixels
+        // on white instead of black.
+        if (format is "jpg" or "bmp" or "heic" && HasAlpha(image))
             image = FlattenOnWhite(image);
+
+        if (format == "heic")
+        {
+            try
+            {
+                HeifWriter.Save(image, outputPath);
+                return;
+            }
+            catch (Exception ex) when (ex is COMException or NotSupportedException or InvalidCastException)
+            {
+                // Through WPF instead: the same encoder at its own (higher) quality, so a bigger file, but a working one.
+                Log.Write($"Couldn't set HEIC quality ({ex.Message}); saving at the encoder's default.");
+            }
+        }
 
         BitmapEncoder encoder = format switch
         {
@@ -366,8 +438,12 @@ internal sealed class ImageConverter : IConverter
             "bmp" => new BmpBitmapEncoder(),
             "gif" => new GifBitmapEncoder(),
             "tiff" => new TiffBitmapEncoder(),
+            "heic" => BitmapEncoder.Create(HeifContainer),
             _ => throw new NotSupportedException($"Can't write .{format} images."),
         };
+        // The HEIF encoder takes plain 32-bit colour.
+        if (format == "heic")
+            image = new FormatConvertedBitmap(image, PixelFormats.Bgr32, null, 0);
         encoder.Frames.Add(BitmapFrame.Create(image));
 
         using var output = File.Create(outputPath);

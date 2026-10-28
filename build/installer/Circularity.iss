@@ -86,6 +86,8 @@ Filename: "{app}\Circularity.exe"; Flags: nowait; Check: ShouldRelaunch
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/im Circularity.exe /f"; Flags: runhidden; RunOnceId: "StopCircularity"
+; Takes out what Windows was told so the "Done" notification could have buttons (it lives in HKCU).
+Filename: "{app}\Circularity.exe"; Parameters: "--uninstall-cleanup"; Flags: runhidden waituntilterminated; RunOnceId: "UnregisterNotifications"
 
 [Code]
 const

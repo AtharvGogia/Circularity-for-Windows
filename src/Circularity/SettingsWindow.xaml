@@ -122,7 +122,17 @@
                 <TabItem Header="Features">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="4,12,12,8">
-                            <TextBlock Text="After conversion" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBlock Text="Save converted files" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <RadioButton x:Name="SaveBesideRadio" Content="Next to the original" GroupName="SaveTo" />
+                            <DockPanel Margin="0,6,0,0">
+                                <Button DockPanel.Dock="Right" Content="Choose…" Click="ChooseFolder_Click" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                <RadioButton x:Name="SaveToFolderRadio" GroupName="SaveTo" VerticalAlignment="Center">
+                                    <TextBlock x:Name="SaveFolderText" TextTrimming="CharacterEllipsis" />
+                                </RadioButton>
+                            </DockPanel>
+                            <TextBlock Text="If that folder isn't there when a file is converted (an unplugged drive, say), the file is saved next to the original instead." Opacity="0.7" Margin="0,6,0,0" TextWrapping="Wrap" />
+
+                            <TextBlock Text="After conversion" FontSize="16" FontWeight="SemiBold" Margin="0,24,0,8" />
                             <CheckBox x:Name="CopyClipboardCheck" Content="Copy converted file(s) to clipboard" />
                             <TextBlock Text="The file itself is copied (like Ctrl+C in File Explorer), so you can paste it directly into another folder or app." Opacity="0.7" Margin="18,4,0,0" TextWrapping="Wrap" />
 
