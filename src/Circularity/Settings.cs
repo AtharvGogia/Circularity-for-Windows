@@ -13,7 +13,7 @@ internal sealed class Settings
 {
     public const int MinWheelSize = 200;
     public const int MaxWheelSize = 360;
-    /// <summary>Circularity's own colour (violet since 0.5.1; orange before, too close to Tangerine's).</summary>
+    /// <summary>Circularity's own colour: violet since 0.5.1, orange before.</summary>
     public const string DefaultAccent = "#8B5CF6";
 
     /// <summary>The default up to 0.5.0, which settings from then still hold when it was never changed.</summary>

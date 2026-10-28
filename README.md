@@ -16,7 +16,17 @@ Everything happens on your PC: nothing is uploaded, and the original file is nev
 [![GitHub Release](https://img.shields.io/github/v/release/AtharvGogia/Circularity-for-Windows?include_prereleases&label=Latest%20Release)](https://github.com/AtharvGogia/Circularity-for-Windows/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/AtharvGogia/Circularity-for-Windows/total?label=Total%20Downloads)](https://github.com/AtharvGogia/Circularity-for-Windows/releases)
 
-Made by **Atharv Gogia**. Open source under the [MIT licence](LICENSE).
+Made by **Atharv Gogia**. Open source under the [MIT licence](LICENSE). It's a one-person side
+project, so if something breaks or you have an idea, I'd really like to hear about it.
+
+## Where the idea came from
+
+Circularity wouldn't exist without [Tangerine](https://tangerineformac.com/), a lovely file
+converter for the Mac by LEAP STUDIO that pops up a wheel of formats right where you're dragging a
+file. When I saw it, I loved the idea and wished I could use it on Windows, so I set out to build
+my own. Circularity is written from scratch for Windows, but the idea of converting a file right
+at your cursor is theirs, and the credit for it belongs to them. Thank you for such a good idea. If
+you're on a Mac, do give Tangerine a try.
 
 ## Download
 
@@ -30,6 +40,9 @@ first time: choose **More info → Run anyway**.
 
 To update later, right-click the tray icon → **Check for updates…** (or use the button in Settings),
 or turn on automatic checks in Settings → Features.
+
+The first time it starts, a short welcome shows you the gesture, and there's a full tutorial under
+**Help** whenever you want it. Thanks for giving it a try!
 
 ## What it does
 
@@ -306,6 +319,9 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 
 ## Known limits
 
+These are the rough edges I know about. Some come from how Windows works; the rest I'd like to
+smooth out over time.
+
 - The gestures only arm when the app you drag from is on an allowlist (Explorer and the main
   browsers and mail apps, see `App.xaml.cs`) and nothing full-screen is running.
 - Dragging from an app running as administrator won't drop onto the wheel; Windows blocks
@@ -370,6 +386,13 @@ The in-app updater looks at this repository's latest GitHub release, so a releas
 Whatever is written in the release's description is shown in the update window as "what's new".
 The repository has to be public for the updater to see releases.
 
+## Feedback
+
+Circularity is still young, and it gets better every time someone tells me what tripped them up.
+If something doesn't work, use **Help → Report a bug** in the tray menu (it fills in the technical
+details for you), or [open an issue](https://github.com/AtharvGogia/Circularity-for-Windows/issues).
+Ideas and "it would be nice if…" are just as welcome as bugs.
+
 ## Licence
 
 Circularity is open source under the [MIT licence](LICENSE): © 2026 Atharv Gogia. The installer
@@ -390,3 +413,5 @@ Everything bundled was chosen so that Circularity itself can stay under the MIT 
   of licences (FreeType, for instance), it's used under the non-GPL one.
 - **PDFsharp** was deliberately not used: from version 6.5 it's AGPL, which would require
   Circularity to be released under the AGPL instead of MIT.
+
+Thanks for reading, and for trying Circularity. — Atharv
