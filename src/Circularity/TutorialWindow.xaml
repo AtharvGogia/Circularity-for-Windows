@@ -1,0 +1,34 @@
+<Window x:Class="Circularity.TutorialWindow"
+        x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Circularity tutorial"
+        Width="1060" Height="720" MinWidth="860" MinHeight="560"
+        WindowStartupLocation="CenterScreen"
+        ThemeMode="System">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="250" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <DockPanel Margin="16,24,8,16">
+            <TextBlock DockPanel.Dock="Top" Text="Tutorial" FontSize="20" FontWeight="SemiBold" Margin="10,0,0,12" />
+            <TextBlock DockPanel.Dock="Bottom" TextWrapping="Wrap" Opacity="0.6" Margin="10,12,0,0"
+                       Text="Open this again from the tray icon: right-click → Help → Tutorial." />
+            <ListBox x:Name="Chapters" BorderThickness="0" Background="Transparent"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+        </DockPanel>
+
+        <DockPanel Grid.Column="1" Margin="24,24,24,16">
+            <DockPanel DockPanel.Dock="Bottom" Margin="0,16,0,0">
+                <Button x:Name="NextButton" DockPanel.Dock="Right" Content="Next" Click="Next_Click" IsDefault="True" MinWidth="96" />
+                <Button x:Name="BackButton" DockPanel.Dock="Right" Content="Back" Click="Back_Click" MinWidth="96" Margin="0,0,8,0" />
+                <TextBlock x:Name="PageText" VerticalAlignment="Center" Opacity="0.6" />
+            </DockPanel>
+            <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ContentPresenter x:Name="PageHost" Margin="0,0,16,8" />
+            </ScrollViewer>
+        </DockPanel>
+    </Grid>
+</Window>

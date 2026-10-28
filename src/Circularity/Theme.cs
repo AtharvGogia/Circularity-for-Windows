@@ -26,10 +26,15 @@ internal static class Theme
         };
     }
 
+    /// <summary>Settings → Personalization → Colors → "Choose your default Windows mode": the taskbar's colour.</summary>
+    public static bool TaskbarIsDark() => ReadsDark("SystemUsesLightTheme");
+
     /// <summary>Settings → Personalization → Colors → "Choose your default app mode".</summary>
-    private static bool SystemUsesDark()
+    private static bool SystemUsesDark() => ReadsDark("AppsUseLightTheme");
+
+    private static bool ReadsDark(string value)
     {
         using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-        return key?.GetValue("AppsUseLightTheme") is int light && light == 0;
+        return key?.GetValue(value) is int light && light == 0;
     }
 }

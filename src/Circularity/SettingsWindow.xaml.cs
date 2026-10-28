@@ -18,6 +18,15 @@ internal partial class SettingsWindow : Window
     /// <summary>Raised when "Check for updates" is clicked.</summary>
     public event Action? CheckForUpdatesRequested;
 
+    /// <summary>Raised by the Help tab's "Open the tutorial".</summary>
+    public event Action? TutorialRequested;
+
+    /// <summary>Raised by the Help tab's "Show the welcome guide".</summary>
+    public event Action? WelcomeRequested;
+
+    /// <summary>Raised by the Help tab's "Report a bug".</summary>
+    public event Action? BugReportRequested;
+
     private static readonly string[] Palette =
     {
         "#FF8A1E", "#F43F5E", "#EC4899", "#8B5CF6", "#3B82F6", "#06B6D4", "#14B8A6", "#22C55E", "#EAB308", "#94A3B8",
@@ -518,6 +527,12 @@ internal partial class SettingsWindow : Window
     private void Done_Click(object sender, RoutedEventArgs e) => Close();
 
     private void CheckForUpdates_Click(object sender, RoutedEventArgs e) => CheckForUpdatesRequested?.Invoke();
+
+    private void Tutorial_Click(object sender, RoutedEventArgs e) => TutorialRequested?.Invoke();
+
+    private void Welcome_Click(object sender, RoutedEventArgs e) => WelcomeRequested?.Invoke();
+
+    private void ReportBug_Click(object sender, RoutedEventArgs e) => BugReportRequested?.Invoke();
 
     private void SourceCode_Click(object sender, RoutedEventArgs e) =>
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"https://github.com/{UpdateChecker.Repository}") { UseShellExecute = true });

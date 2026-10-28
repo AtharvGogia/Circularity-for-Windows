@@ -390,7 +390,7 @@ internal static class ReadmeMedia
 
             var tray = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 10, 0) };
             tray.Children.Add(Spaced(Glyph(0xE70E, 11, fg), 10));
-            tray.Children.Add(Spaced(new Image { Source = AppImage(), Width = 16, Height = 16 }, 12));
+            tray.Children.Add(Spaced(new Image { Source = AppImage(darkDisc: !dark), Width = 16, Height = 16 }, 12));
             tray.Children.Add(Spaced(Glyph(0xE701, 14, fg), 8));
             tray.Children.Add(Spaced(Glyph(0xE767, 14, fg), 8));
             tray.Children.Add(Spaced(Glyph(0xE83F, 14, fg), 12));
@@ -456,11 +456,8 @@ internal static class ReadmeMedia
             return grid;
         }
 
-        private static ImageSource AppImage()
-        {
-            using var icon = AppIcon.Create(new Settings().Accent);
-            return AppIcon.ToImageSource(icon);
-        }
+        /// <summary>The tray icon: the white version on a dark taskbar or notification, the charcoal one on a light taskbar.</summary>
+        private static ImageSource AppImage(bool darkDisc) => AppIcon.Draw(new Settings().Accent, darkDisc, 32);
 
         // --- File Explorer ---
 
@@ -939,7 +936,7 @@ internal static class ReadmeMedia
                             Children =
                             {
                                 Docked(Glyph(0xE8BB, 10, 0xB0FFFFFF), Dock.Right),
-                                Docked(new Image { Source = AppImage(), Width = 16, Height = 16, Margin = new Thickness(0, 0, 8, 0) }, Dock.Left),
+                                Docked(new Image { Source = AppImage(darkDisc: false), Width = 16, Height = 16, Margin = new Thickness(0, 0, 8, 0) }, Dock.Left),
                                 Text("Circularity", 12, 0xC0FFFFFF),
                             },
                         },

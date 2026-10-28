@@ -137,6 +137,30 @@
                     </ScrollViewer>
                 </TabItem>
 
+                <TabItem Header="Help">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="4,12,12,8">
+                            <TextBlock Text="Tutorial" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,4" />
+                            <TextBlock TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,10"
+                                       Text="Everything Circularity can do, one chapter at a time: opening the wheel, every format and tool, your own buttons, settings, and what to do if something isn't working. It has a wheel to try and a practice picture to drag." />
+                            <Button Content="Open the tutorial" Click="Tutorial_Click" HorizontalAlignment="Left" />
+
+                            <TextBlock Text="Welcome guide" FontSize="16" FontWeight="SemiBold" Margin="0,24,0,4" />
+                            <TextBlock TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,10"
+                                       Text="The short guide shown the first time Circularity started." />
+                            <Button Content="Show the welcome guide" Click="Welcome_Click" HorizontalAlignment="Left" />
+
+                            <TextBlock Text="Report a bug" FontSize="16" FontWeight="SemiBold" Margin="0,24,0,4" />
+                            <TextBlock TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,10"
+                                       Text="Opens a new bug report on GitHub (you'll need a free GitHub account), and copies this PC's diagnostics to the clipboard to paste into it. They include folder paths, so look them over before you send it." />
+                            <Button Content="Report a bug" Click="ReportBug_Click" HorizontalAlignment="Left" />
+
+                            <TextBlock TextWrapping="Wrap" Opacity="0.7" Margin="0,24,0,0"
+                                       Text="All three are also in the tray icon's menu, under Help." />
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
                 <TabItem x:Name="AboutTab" Header="About">
                     <DockPanel Margin="4,12,4,4">
                         <StackPanel DockPanel.Dock="Top">

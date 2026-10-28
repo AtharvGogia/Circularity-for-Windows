@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs>
+  <linearGradient id="disc" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="492"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#F1F1F1"/></linearGradient>
+  <linearGradient id="seg" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="492"><stop offset="0" stop-color="#FFDCC0"/><stop offset="1" stop-color="#FFC596"/></linearGradient>
+  <linearGradient id="lit" gradientUnits="userSpaceOnUse" x1="300" y1="40" x2="470" y2="260"><stop offset="0" stop-color="#FFA552"/><stop offset="1" stop-color="#F26B00"/></linearGradient>
+  <radialGradient id="hub" cx="0.4" cy="0.35" r="0.75"><stop offset="0" stop-color="#FFA552"/><stop offset="1" stop-color="#F26B00"/></radialGradient>
+  <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="9" flood-color="#000" flood-opacity="0.22"/></filter>
+  <clipPath id="discClip"><circle cx="256" cy="256" r="236"/></clipPath>
+</defs>
+<circle cx="256" cy="256" r="236" fill="url(#disc)" filter="url(#shadow)"/>
+<path d="M179.18,78.95 A193.00,193.00 0 0 1 332.82,78.95 L280.07,170.32 A89.00,89.00 0 0 0 231.93,170.32 Z" fill="url(#seg)" stroke="url(#seg)" stroke-width="26" stroke-linejoin="round"/>
+<path d="M447.74,278.00 A193.00,193.00 0 0 1 370.92,411.05 L318.17,319.68 A89.00,89.00 0 0 0 342.24,278.00 Z" fill="url(#seg)" stroke="url(#seg)" stroke-width="26" stroke-linejoin="round"/>
+<path d="M332.82,433.05 A193.00,193.00 0 0 1 179.18,433.05 L231.93,341.68 A89.00,89.00 0 0 0 280.07,341.68 Z" fill="url(#seg)" stroke="url(#seg)" stroke-width="26" stroke-linejoin="round"/>
+<path d="M141.08,411.05 A193.00,193.00 0 0 1 64.26,278.00 L169.76,278.00 A89.00,89.00 0 0 0 193.83,319.68 Z" fill="url(#seg)" stroke="url(#seg)" stroke-width="26" stroke-linejoin="round"/>
+<path d="M64.26,234.00 A193.00,193.00 0 0 1 141.08,100.95 L193.83,192.32 A89.00,89.00 0 0 0 169.76,234.00 Z" fill="url(#seg)" stroke="url(#seg)" stroke-width="26" stroke-linejoin="round"/>
+<g clip-path="url(#discClip)"><path d="M406.09,40.03 A263.00,263.00 0 0 1 518.08,234.00 L342.24,234.00 A89.00,89.00 0 0 0 318.17,192.32 Z" fill="url(#lit)" stroke="url(#lit)" stroke-width="26" stroke-linejoin="round"/></g>
+<circle cx="256" cy="256" r="58" fill="url(#hub)"/>
+<circle cx="256" cy="256" r="57" fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="2"/>
+</svg>

@@ -41,6 +41,8 @@ public partial class App : Application
     private Forms.ToolStripMenuItem? _cancelItem;
     private SettingsWindow? _settingsWindow;
     private UpdateWindow? _updateWindow;
+    private WelcomeWindow? _welcomeWindow;
+    private TutorialWindow? _tutorialWindow;
     private InstanceChannel? _channel;
     private GlobalHotkey? _hotkey;
     private bool _dialogOpen;
@@ -161,9 +163,97 @@ public partial class App : Application
 
     private void ShowWelcome()
     {
-        var welcome = Dialog(new WelcomeWindow(_settings));
-        welcome.OpenSettingsRequested += OpenSettings;
-        welcome.Show();
+        if (_welcomeWindow != null)
+        {
+            _welcomeWindow.Activate();
+            return;
+        }
+        _welcomeWindow = Dialog(new WelcomeWindow(_settings));
+        _welcomeWindow.OpenSettingsRequested += OpenSettings;
+        _welcomeWindow.TutorialRequested += OpenTutorial;
+        _welcomeWindow.Closed += (_, _) =>
+        {
+            _welcomeWindow = null;
+            ScheduleMemoryRelease();
+        };
+        _welcomeWindow.Show();
+    }
+
+    /// <summary>
+    /// Puts the diagnostics on the clipboard and opens a new GitHub issue with a short template to
+    /// paste them into. They hold folder paths (which can include the user's name), so they go only
+    /// on the clipboard, for the user to look over, and never into the web address.
+    /// </summary>
+    private async void ReportBug()
+    {
+        string? report = null;
+        try
+        {
+            report = await Task.Run(async () => Diagnostics.Report(await Diagnostics.CollectAsync(_ffmpeg)));
+        }
+        catch (Exception ex)
+        {
+            // Never let a failed report take the app down; the issue page still opens.
+            Log.Write($"Couldn't collect diagnostics for a bug report: {ex.Message}");
+        }
+        // Back on the app's thread, which the clipboard and the tray need, whichever thread the await resumed on.
+        Dispatcher.Invoke(() => OpenBugReport(report));
+    }
+
+    private void OpenBugReport(string? report)
+    {
+        bool copied = false;
+        if (report != null)
+        {
+            try
+            {
+                Clipboard.SetText(report);
+                copied = true;
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+            {
+                Log.Write($"Couldn't copy diagnostics (clipboard busy): {ex.Message}");
+            }
+        }
+
+        string body =
+            "**What happened?**\n\n\n" +
+            "**What did you expect to happen?**\n\n\n" +
+            "**How to make it happen again**\n1. \n2. \n\n" +
+            "**Diagnostics**\n" +
+            (copied
+                ? "Circularity copied these to your clipboard: click below and press Ctrl+V. They include folder paths from your PC, so remove anything you'd rather not share.\n\n"
+                : "Open Settings → About → Copy diagnostics, then paste them here.\n\n") +
+            "```\n\n```\n";
+        string url = $"https://github.com/{UpdateChecker.Repository}/issues/new?body={Uri.EscapeDataString(body)}";
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            if (copied)
+                Notify("Diagnostics copied", "Paste them into the bug report that just opened in your browser (Ctrl+V).", Forms.ToolTipIcon.Info);
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            Log.Write($"Couldn't open the bug report page: {ex.Message}");
+            Notify("Couldn't open your browser", $"Report bugs at github.com/{UpdateChecker.Repository}/issues.", Forms.ToolTipIcon.Warning);
+        }
+    }
+
+    private void OpenTutorial()
+    {
+        if (_tutorialWindow != null)
+        {
+            _tutorialWindow.Activate();
+            return;
+        }
+        _tutorialWindow = Dialog(new TutorialWindow(_settings, _queue!.CanHandle));
+        _tutorialWindow.OpenSettingsRequested += OpenSettings;
+        _tutorialWindow.Closed += (_, _) =>
+        {
+            _tutorialWindow = null;
+            ScheduleMemoryRelease();
+        };
+        _tutorialWindow.Show();
     }
 
     /// <summary>Another launch handed over files (open the wheel) or nothing (show Settings).</summary>
@@ -236,8 +326,12 @@ public partial class App : Application
 
     private void OnUserPreferenceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
     {
-        if (e.Category == Microsoft.Win32.UserPreferenceCategory.General && _settings.Theme == AppTheme.System)
+        if (e.Category != Microsoft.Win32.UserPreferenceCategory.General)
+            return;
+        if (_settings.Theme == AppTheme.System)
             Dispatcher.BeginInvoke(() => ApplySettings(_settings));
+        else
+            Dispatcher.BeginInvoke(UpdateTrayIcon); // The taskbar may have switched between light and dark.
     }
 
     private void ApplySettings(Settings settings)
@@ -247,13 +341,17 @@ public partial class App : Application
         _shiftEnabled = settings.ShiftTrigger;
         _wheel?.ApplySettings(settings);
         UpdateHotkey();
+        UpdateTrayIcon();
+    }
 
-        if (_tray != null)
-        {
-            var old = _tray.Icon;
-            _tray.Icon = AppIcon.Create(settings.Accent);
-            old?.Dispose();
-        }
+    /// <summary>The icon in the accent colour, in the version that stands out on the taskbar: white on dark, charcoal on light.</summary>
+    private void UpdateTrayIcon()
+    {
+        if (_tray == null)
+            return;
+        var old = _tray.Icon;
+        _tray.Icon = AppIcon.Create(_settings.Accent, darkDisc: !Theme.TaskbarIsDark());
+        old?.Dispose();
     }
 
     /// <summary>(Re)starts the background update checks if their settings changed.</summary>
@@ -622,7 +720,8 @@ public partial class App : Application
     /// <summary>Gives a window the app icon and the chosen light/dark theme.</summary>
     private T Dialog<T>(T window) where T : Window
     {
-        using (var icon = AppIcon.Create(_settings.Accent))
+        // The white version, like the exe's: the same icon also shows on the window's taskbar button.
+        using (var icon = AppIcon.Create(_settings.Accent, darkDisc: false))
             window.Icon = AppIcon.ToImageSource(icon);
         Theme.ApplyTo(window, _settings.Theme);
         return window;
@@ -646,6 +745,9 @@ public partial class App : Application
             StartAutoUpdateCheck();
         };
         _settingsWindow.CheckForUpdatesRequested += OpenUpdates;
+        _settingsWindow.TutorialRequested += OpenTutorial;
+        _settingsWindow.WelcomeRequested += ShowWelcome;
+        _settingsWindow.BugReportRequested += ReportBug;
         _settingsWindow.Closed += (_, _) =>
         {
             _settingsWindow = null;
@@ -812,6 +914,13 @@ public partial class App : Application
         menu.Items.Add("Settings…", null, (_, _) => OpenSettings());
         menu.Items.Add("Check for updates…", null, (_, _) => OpenUpdates());
 
+        var help = new Forms.ToolStripMenuItem("Help");
+        help.DropDownItems.Add("Tutorial…", null, (_, _) => OpenTutorial());
+        help.DropDownItems.Add("Welcome guide…", null, (_, _) => ShowWelcome());
+        help.DropDownItems.Add(new Forms.ToolStripSeparator());
+        help.DropDownItems.Add("Report a bug…", null, (_, _) => ReportBug());
+        menu.Items.Add(help);
+
         var pause = new Forms.ToolStripMenuItem("Pause gestures") { CheckOnClick = true };
         pause.CheckedChanged += (_, _) =>
         {
@@ -837,7 +946,7 @@ public partial class App : Application
 
         var tray = new Forms.NotifyIcon
         {
-            Icon = AppIcon.Create(_settings.Accent),
+            Icon = AppIcon.Create(_settings.Accent, darkDisc: !Theme.TaskbarIsDark()),
             Text = TrayTitle,
             ContextMenuStrip = menu,
             Visible = true,

@@ -98,8 +98,9 @@ internal static class Diagnostics
         return version switch
         {
             { Revision: > 0 } => $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}",
-            { Build: > 0 } => $"{version.Major}.{version.Minor}.{version.Build}",
-            _ => $"{version?.Major}.{version?.Minor}",
+            // Always three parts, so 0.4.0 doesn't show as "0.4".
+            not null => $"{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}",
+            _ => "unknown",
         };
     }
 

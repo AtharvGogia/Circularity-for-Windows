@@ -139,6 +139,12 @@ internal static class Previews
                 window.Tabs.SelectedItem = tab;
                 return window;
             }
+            TutorialWindow Tutorial(AppTheme theme, int chapter)
+            {
+                var window = new TutorialWindow(new Settings { Theme = theme }, (_, _) => true);
+                window.Chapters.SelectedIndex = chapter;
+                return window;
+            }
 
             var windows = new (string Name, Func<AppTheme, Window> Create)[]
             {
@@ -146,7 +152,13 @@ internal static class Previews
                 ("settings-buttons", theme => { var w = new SettingsWindow(WithPreset(theme)); return OnTab(w, w.ButtonsTab); }),
                 ("settings-general", theme => { var w = new SettingsWindow(new Settings { Theme = theme }); return OnTab(w, (TabItem)w.Tabs.Items[2]); }),
                 ("settings-about", theme => { var w = new SettingsWindow(new Settings { Theme = theme }, null, new Circularity.Engine.FfmpegConverter()); return OnTab(w, w.AboutTab); }),
+                ("settings-help", theme => { var w = new SettingsWindow(new Settings { Theme = theme }); return OnTab(w, (TabItem)w.Tabs.Items[4]); }),
                 ("welcome", theme => new WelcomeWindow(new Settings { Theme = theme })),
+                ("tutorial", theme => Tutorial(theme, 0)),
+                ("tutorial-dragging", theme => Tutorial(theme, 1)),
+                ("tutorial-try", theme => Tutorial(theme, 3)),
+                ("tutorial-click-mode", theme => Tutorial(theme, 4)),
+                ("tutorial-after", theme => Tutorial(theme, 10)),
                 ("resize", _ => new ResizeDialog(sample, (4032, 3024))),
                 ("compress", _ => new CompressDialog(sample)),
                 ("compress-video", _ => new VideoCompressDialog(sample, new MediaInfo(TimeSpan.FromSeconds(151), 1920, 1080, 30, 12_000_000, true))),
@@ -170,8 +182,8 @@ internal static class Previews
                     // The About tab fills in once it has looked around the PC.
                     if (name == "settings-about")
                         Settle(2500);
-                    if (name == "trim")
-                        Settle(600); // The cut-point previews load after a short pause.
+                    if (name == "trim" || name.StartsWith("tutorial") || name == "welcome")
+                        Settle(600); // Cut-point previews load, and wheels finish their opening animation.
                     // The window's own backdrop (Mica) isn't part of its content, so paint a plain one behind it.
                     var backdrop = theme == AppTheme.Dark ? Color.FromRgb(0x20, 0x20, 0x20) : Color.FromRgb(0xF3, 0xF3, 0xF3);
                     Save((FrameworkElement)window.Content, System.IO.Path.Combine(folder, $"{name}-{theme.ToString().ToLowerInvariant()}.png"),
@@ -180,6 +192,24 @@ internal static class Previews
                 }
             }
             File.Delete(sample[0]);
+
+            // The app icon at every size it's used, both versions, on light and dark, in a few accent colours.
+            var sheet = new StackPanel();
+            foreach (var (back, darkDisc) in new[] { (0xFFF3F3F3u, true), (0xFFF3F3F3u, false), (0xFF202020u, false), (0xFF202020u, true) })
+            {
+                foreach (var accent in new[] { "#FF8A1E", "#3B82F6", "#22C55E" })
+                {
+                    var row = new StackPanel { Orientation = Orientation.Horizontal, Background = new SolidColorBrush(Color.FromArgb((byte)(back >> 24), (byte)(back >> 16), (byte)(back >> 8), (byte)back)) };
+                    foreach (int size in new[] { 256, 64, 48, 40, 32, 24, 20, 16 })
+                    {
+                        var colour = (Color)ColorConverter.ConvertFromString(accent);
+                        row.Children.Add(new Image { Source = AppIcon.Draw(colour, darkDisc, size), Width = size, Height = size, Margin = new Thickness(12), VerticalAlignment = VerticalAlignment.Center, SnapsToDevicePixels = true });
+                    }
+                    sheet.Children.Add(row);
+                }
+            }
+            RenderOptions.SetBitmapScalingMode(sheet, BitmapScalingMode.NearestNeighbor);
+            Save(sheet, System.IO.Path.Combine(folder, "app-icon.png"));
 
             exitCode = 0;
         });

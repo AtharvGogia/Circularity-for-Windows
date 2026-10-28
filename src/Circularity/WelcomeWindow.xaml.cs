@@ -23,6 +23,9 @@ internal partial class WelcomeWindow : Window
     /// <summary>Raised when "Open settings" is clicked.</summary>
     public event Action? OpenSettingsRequested;
 
+    /// <summary>Raised when "Full tutorial" is clicked.</summary>
+    public event Action? TutorialRequested;
+
     public WelcomeWindow(Settings settings)
     {
         InitializeComponent();
@@ -30,6 +33,9 @@ internal partial class WelcomeWindow : Window
         var small = settings.Clone();
         small.WheelSize = 240;
         _demo.ApplySettings(small);
+        // The view leaves room around the wheel for the More arc, which this demo never opens. Taking
+        // that room back out of its layout size centres the wheel itself in the box (the box clips).
+        _demo.Margin = new Thickness(-(_demo.Extent - small.WheelSize) / 2);
         _demo.SetActions(DemoActions, "holiday.jpg", "3.4 MB");
         DemoHost.Content = _demo;
 
@@ -52,6 +58,12 @@ internal partial class WelcomeWindow : Window
     {
         Close();
         OpenSettingsRequested?.Invoke();
+    }
+
+    private void Tutorial_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
+        TutorialRequested?.Invoke();
     }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();

@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/media/logo.svg" width="128" alt="The Circularity logo: a wheel of six segments with one lit in orange"></p>
+
 # Circularity
 
 A file converter for Windows that lives at your cursor: drag a file, tap right-click (or Shift)
@@ -124,7 +126,10 @@ While something is running, hover the tray icon to see progress
 failed job leaves no half-written file behind. You get one notification per drop; clicking it shows
 the result in File Explorer.
 
-The first time Circularity starts, a short welcome explains the gestures.
+The first time Circularity starts, a short welcome explains the gestures. For everything else there's
+a **tutorial** built in: thirteen chapters, from opening the wheel to every format and tool, your own
+buttons, settings and troubleshooting, with a wheel to try and a practice picture to drag. Both are in
+the tray icon's menu under **Help** and in Settings → **Help**.
 
 ### Settings
 
@@ -148,6 +153,9 @@ Settings is live: hover and click it, and switch it between image, video, audio 
   **check for updates automatically**, off by default: when Circularity starts, or every day, 3
   days, week or 30 days. A new version is mentioned once, in a notification that opens the
   update window
+- **Help**: the tutorial, the welcome guide, and **Report a bug**, which opens a new GitHub issue
+  and copies the diagnostics (below) to the clipboard to paste into it. They stay on the clipboard,
+  never in the web address, since they include folder paths
 - **About**: what Circularity found on this PC (FFmpeg, Office, WebView2, PDFium, Windows) and
   **Copy diagnostics**, which puts that list and the end of the log on the clipboard for a bug report
 
@@ -165,7 +173,7 @@ It produces, in `artifacts\`:
 
 | Output | What it is | Size |
 | --- | --- | --- |
-| `artifacts\CircularitySetup-0.4.0.exe` | The installer to hand out | ~72 MB |
+| `artifacts\CircularitySetup-x.y.z.exe` | The installer to hand out | ~72 MB |
 | `artifacts\Circularity\Circularity.exe` | The app itself, in a self-contained folder that also runs without installing (e.g. from a USB stick) | ~240 MB folder |
 
 The installer:
@@ -221,7 +229,8 @@ That development build lands in `src\Circularity\bin\Debug\net10.0-windows10.0.1
 and needs .NET 10 installed; the installer above is what to give other people.
 
 A tray icon appears with a "Circularity is running" notification. Right-click it for
-**Settings…**, **Pause gestures**, **Cancel conversions**, **Open log** and **Exit**.
+**Settings…**, **Check for updates…**, **Help**, **Pause gestures**, **Cancel conversions**,
+**Open log** and **Exit**.
 
 ## Test it
 
@@ -302,7 +311,7 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 | `VideoCompressDialog.xaml(.cs)` / `PdfCompressDialog.xaml(.cs)` | Video and PDF compression options. |
 | `TrimDialog.xaml(.cs)` / `Times.cs` | Trim window for videos and audio / reading and writing times like "1:23.4". |
 | `CropWindow.xaml(.cs)` | Crop editor. |
-| `AppIcon.cs` | Draws the accent-coloured app icon at runtime. |
+| `AppIcon.cs` | Draws the app icon in the accent colour: white or charcoal to stand out on the taskbar, and a simpler design at 32 px and below. |
 | `Engine/ConversionQueue.cs` | Background job queue (two at a time): progress, cancellation, per-drop batches, cleanup of failed output. |
 | `Engine/Operations.cs` | Convert / resize / crop / compress, and how a resize maps a source size to a new one. |
 | `Engine/IConverter.cs` | The interface each backend implements. |
@@ -317,6 +326,7 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 | `InstanceChannel.cs` | One running copy; later launches hand their files over a private named pipe. |
 | `GlobalHotkey.cs` / `ExplorerSelection.cs` | Ctrl+Alt+C, and reading the selected files from Explorer or the desktop. |
 | `WelcomeWindow.xaml(.cs)` | The first-run welcome. |
+| `TutorialWindow.xaml(.cs)` | The full tutorial: chapters, a wheel to try, and a practice picture. |
 | `StartAtSignIn.cs` | The start-at-sign-in toggle (shared with the installer). |
 | `App.xaml.cs` | Tray icon and menu, gesture checks, routing wheel buttons to dialogs and the queue, notifications. |
 | `UpdateChecker.cs` / `UpdateWindow.xaml(.cs)` | "Check for updates": GitHub Releases, download, verify, upgrade. |
@@ -325,8 +335,8 @@ Everything the hooks decide is written to `%LOCALAPPDATA%\Circularity\log.txt`.
 
 The in-app updater looks at this repository's latest GitHub release, so a release must:
 
-1. be tagged with the version, e.g. `v0.3.0` (matching `<Version>` in `src/Circularity/Circularity.csproj`), and
-2. have the installer from `build\build.ps1`, `CircularitySetup-0.4.0.exe`, attached as an asset.
+1. be tagged `vx.y.z`, where `x.y.z` is `<Version>` in `src/Circularity/Circularity.csproj`, and
+2. have the installer from `build\build.ps1`, `CircularitySetup-x.y.z.exe`, attached as an asset.
 
 Whatever is written in the release's description is shown in the update window as "what's new".
 The repository has to be public for the updater to see releases.
