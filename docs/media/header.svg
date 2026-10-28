@@ -2,9 +2,9 @@
 <g transform="scale(0.3125)">
 <defs>
   <linearGradient id="disc" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="492"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#F1F1F1"/></linearGradient>
-  <linearGradient id="seg" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="492"><stop offset="0" stop-color="#FFDCC0"/><stop offset="1" stop-color="#FFC596"/></linearGradient>
-  <linearGradient id="lit" gradientUnits="userSpaceOnUse" x1="300" y1="40" x2="470" y2="260"><stop offset="0" stop-color="#FFA552"/><stop offset="1" stop-color="#F26B00"/></linearGradient>
-  <radialGradient id="hub" cx="0.4" cy="0.35" r="0.75"><stop offset="0" stop-color="#FFA552"/><stop offset="1" stop-color="#F26B00"/></radialGradient>
+  <linearGradient id="seg" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="492"><stop offset="0" stop-color="#E0D3FD"/><stop offset="1" stop-color="#CBB6FB"/></linearGradient>
+  <linearGradient id="lit" gradientUnits="userSpaceOnUse" x1="300" y1="40" x2="470" y2="260"><stop offset="0" stop-color="#A580F8"/><stop offset="1" stop-color="#7D53DD"/></linearGradient>
+  <radialGradient id="hub" cx="0.4" cy="0.35" r="0.75"><stop offset="0" stop-color="#A580F8"/><stop offset="1" stop-color="#7D53DD"/></radialGradient>
   <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="9" flood-color="#000" flood-opacity="0.22"/></filter>
   <clipPath id="discClip"><circle cx="256" cy="256" r="236"/></clipPath>
 </defs>

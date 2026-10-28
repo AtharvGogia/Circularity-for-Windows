@@ -31,7 +31,7 @@
     <Copyright>© 2026 Atharv Gogia</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/AtharvGogia/Circularity-for-Windows</RepositoryUrl>
-    <Version>0.5.0</Version>
+    <Version>0.5.1</Version>
     <!-- For HeifWriter's one direct COM call (the HEIC quality setting). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Keep the version plain (e.g. "0.2.0") instead of appending the git commit id. -->

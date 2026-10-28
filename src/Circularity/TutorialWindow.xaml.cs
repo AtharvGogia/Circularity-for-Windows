@@ -436,7 +436,7 @@ internal partial class TutorialWindow : Window
         return grid;
     }
 
-    /// <summary>The same colourful backdrop as Settings and the welcome, so the wheel's transparency shows.</summary>
+    /// <summary>The same neutral grey backdrop as Settings and the welcome, which never clashes with the accent.</summary>
     private static Border Backdrop(double size, UIElement content) => new()
     {
         Width = size,
@@ -446,9 +446,9 @@ internal partial class TutorialWindow : Window
         VerticalAlignment = VerticalAlignment.Top,
         Background = new LinearGradientBrush(new GradientStopCollection
         {
-            new(Color.FromRgb(0x5B, 0x7F, 0xD6), 0),
-            new(Color.FromRgb(0x9C, 0x5B, 0xD6), 0.5),
-            new(Color.FromRgb(0x2A, 0x9D, 0x8F), 1),
+            new(Color.FromRgb(0xA3, 0xA8, 0xB2), 0),
+            new(Color.FromRgb(0x7C, 0x82, 0x8D), 0.5),
+            new(Color.FromRgb(0x55, 0x5B, 0x66), 1),
         }, new Point(0, 0), new Point(1, 1)),
         Child = new Viewbox { Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly, Margin = new Thickness(6), Child = content },
     };

@@ -125,6 +125,14 @@ internal static class Program
             await OutputFolderChecks(queue, dir, image);
             await HeicAvifOutputChecks(queue, ffmpeg, dir, photo);
 
+            // The default colour moved from orange to violet in 0.5.1: settings still on the old default
+            // move with it, but an orange someone picked (or any other colour) stays.
+            Check("settings left on the old orange default become violet",
+                Settings.FromJson("{\"AccentColor\":\"#FF8A1E\"}").AccentColor == Settings.DefaultAccent, Settings.FromJson("{\"AccentColor\":\"#FF8A1E\"}").AccentColor);
+            Check("a picked orange, or another colour, is kept",
+                Settings.FromJson("{\"AccentColor\":\"#FF8A1E\",\"AccentChosen\":true}").AccentColor == "#FF8A1E" && Settings.FromJson("{\"AccentColor\":\"#22C55E\"}").AccentColor == "#22C55E", "");
+            Check("new settings start violet", new Settings().AccentColor == "#8B5CF6", new Settings().AccentColor);
+
             // The updater reads release tags with three or four numbers, and orders them properly.
             Version Tag(string tag) => UpdateChecker.TryParseVersion(tag, out var v) ? v : new Version(0, 0, 0, 0);
             Check("updater: v0.3.3.1 is newer than v0.3.3, v0.3.3 equals 0.3.3.0, v0.3.4 is newer still",

@@ -13,13 +13,20 @@ internal sealed class Settings
 {
     public const int MinWheelSize = 200;
     public const int MaxWheelSize = 360;
-    public const string DefaultAccent = "#FF8A1E";
+    /// <summary>Circularity's own colour (violet since 0.5.1; orange before, too close to Tangerine's).</summary>
+    public const string DefaultAccent = "#8B5CF6";
+
+    /// <summary>The default up to 0.5.0, which settings from then still hold when it was never changed.</summary>
+    private const string OldDefaultAccent = "#FF8A1E";
 
     /// <summary>Wheel diameter in device-independent pixels.</summary>
     public int WheelSize { get; set; } = 260;
 
     /// <summary>Accent colour as #RRGGBB, used for the highlighted button and tool buttons.</summary>
     public string AccentColor { get; set; } = DefaultAccent;
+
+    /// <summary>Set once the user picks a colour, so a deliberate choice is never replaced by a new default.</summary>
+    public bool AccentChosen { get; set; }
 
     /// <summary>Opacity of the wheel's background, 0.4 to 1. The buttons stay readable at any value.</summary>
     public double Opacity { get; set; } = 0.82;
@@ -102,7 +109,7 @@ internal sealed class Settings
         try
         {
             if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath))?.Normalized() ?? new Settings();
+                return FromJson(File.ReadAllText(FilePath));
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -110,6 +117,9 @@ internal sealed class Settings
         }
         return new Settings();
     }
+
+    /// <summary>Settings as saved, brought up to date (also used by the tests).</summary>
+    internal static Settings FromJson(string json) => JsonSerializer.Deserialize<Settings>(json)?.Normalized() ?? new Settings();
 
     public void Save()
     {
@@ -130,6 +140,9 @@ internal sealed class Settings
         WheelSize = Math.Clamp(WheelSize, MinWheelSize, MaxWheelSize);
         Opacity = Math.Clamp(Opacity, 0.4, 1);
         AccentColor = string.IsNullOrWhiteSpace(AccentColor) ? DefaultAccent : AccentColor;
+        // Still on the old default, and never picked: it was never really chosen, so it moves to the new one.
+        if (!AccentChosen && string.Equals(AccentColor, OldDefaultAccent, StringComparison.OrdinalIgnoreCase))
+            AccentColor = DefaultAccent;
         Presets = (Presets ?? new()).Where(p => p is { Id.Length: > 0, Name.Length: > 0 } && (p.Resize != null) != (p.Compress != null)).ToList();
         ButtonLayouts ??= new();
         return this;

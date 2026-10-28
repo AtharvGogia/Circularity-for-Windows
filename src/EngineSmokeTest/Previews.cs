@@ -217,7 +217,7 @@ internal static class Previews
             var sheet = new StackPanel();
             foreach (var (back, darkDisc) in new[] { (0xFFF3F3F3u, true), (0xFFF3F3F3u, false), (0xFF202020u, false), (0xFF202020u, true) })
             {
-                foreach (var accent in new[] { "#FF8A1E", "#3B82F6", "#22C55E" })
+                foreach (var accent in new[] { "#8B5CF6", "#3B82F6", "#22C55E" })
                 {
                     var row = new StackPanel { Orientation = Orientation.Horizontal, Background = new SolidColorBrush(Color.FromArgb((byte)(back >> 24), (byte)(back >> 16), (byte)(back >> 8), (byte)back)) };
                     foreach (int size in new[] { 256, 64, 48, 40, 32, 24, 20, 16 })

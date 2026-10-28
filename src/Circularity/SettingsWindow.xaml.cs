@@ -29,7 +29,7 @@ internal partial class SettingsWindow : Window
 
     private static readonly string[] Palette =
     {
-        "#FF8A1E", "#F43F5E", "#EC4899", "#8B5CF6", "#3B82F6", "#06B6D4", "#14B8A6", "#22C55E", "#EAB308", "#94A3B8",
+        "#8B5CF6", "#EC4899", "#F43F5E", "#FF8A1E", "#EAB308", "#22C55E", "#14B8A6", "#06B6D4", "#3B82F6", "#94A3B8",
     };
 
     private static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
@@ -554,6 +554,7 @@ internal partial class SettingsWindow : Window
     private void SetAccent(string hex)
     {
         _settings.AccentColor = hex;
+        _settings.AccentChosen = true;
         BuildSwatches();
         Refresh();
         SettingsChanged?.Invoke(_settings.Clone());

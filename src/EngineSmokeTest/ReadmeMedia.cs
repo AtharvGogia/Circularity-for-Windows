@@ -194,8 +194,8 @@ internal static class ReadmeMedia
         var center = new Point(Width / 2.0, (Height - TaskbarHeight) / 2.0);
         var looks = new (string Accent, AppTheme Theme)[]
         {
-            ("#FF8A1E", AppTheme.Dark), ("#3B82F6", AppTheme.Dark), ("#22C55E", AppTheme.Dark),
-            ("#EC4899", AppTheme.Light), ("#8B5CF6", AppTheme.Light), ("#06B6D4", AppTheme.Light),
+            ("#8B5CF6", AppTheme.Dark), ("#3B82F6", AppTheme.Dark), ("#22C55E", AppTheme.Dark),
+            ("#EC4899", AppTheme.Light), ("#FF8A1E", AppTheme.Light), ("#06B6D4", AppTheme.Light),
         };
         if (s.Once("setup"))
         {

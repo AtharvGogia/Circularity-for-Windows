@@ -13,14 +13,14 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- Live preview over a colourful backdrop, so the transparency setting is visible. -->
+        <!-- Live preview over a neutral grey backdrop (so it never clashes with the accent), with shapes behind the wheel so the transparency setting is visible. -->
         <StackPanel VerticalAlignment="Top" Width="400">
         <Border Width="400" Height="400" CornerRadius="12" ClipToBounds="True">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                    <GradientStop Color="#FF5B7FD6" Offset="0" />
-                    <GradientStop Color="#FF9C5BD6" Offset="0.5" />
-                    <GradientStop Color="#FF2A9D8F" Offset="1" />
+                    <GradientStop Color="#FFA3A8B2" Offset="0" />
+                    <GradientStop Color="#FF7C828D" Offset="0.5" />
+                    <GradientStop Color="#FF555B66" Offset="1" />
                 </LinearGradientBrush>
             </Border.Background>
             <Grid>
