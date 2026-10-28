@@ -1,6 +1,9 @@
-<p align="center"><img src="docs/media/logo.svg" width="128" alt="The Circularity logo: a wheel of six segments with one lit in orange"></p>
-
-# Circularity
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/header-dark.svg">
+    <img src="docs/media/header.svg" height="80" alt="Circularity">
+  </picture>
+</p>
 
 A file converter for Windows that lives at your cursor: drag a file, tap right-click (or Shift)
 mid-drag, and drop it on a button in the wheel that pops up around it.
@@ -272,6 +275,9 @@ the real one, then asks the real GitHub API once.
 `--render-readme-media docs\media` re-renders the GIFs in this README from the real wheel and its
 animations (nothing on screen is recorded). `--write-icon src\Circularity\Assets\Circularity.ico`
 regenerates the app icon.
+
+The README's header (`docs/media/header.svg` and `header-dark.svg`) is the logo with "Circularity"
+set in Poppins SemiBold, the letters stored as outlines so it looks the same without the font.
 
 `--startup-test` checks the start-at-sign-in toggle against the real registry, then restores
 whatever was there before.
