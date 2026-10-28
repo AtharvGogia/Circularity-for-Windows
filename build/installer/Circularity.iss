@@ -33,6 +33,10 @@ OutputBaseFilename=CircularitySetup-{#AppVersion}
 SetupIconFile=..\..\src\Circularity\Assets\Circularity.ico
 UninstallDisplayIcon={app}\Circularity.exe
 UninstallDisplayName=Circularity
+; Tells Explorer to refresh its icons once installed. Without it, an update that changes the icon
+; keeps showing the old one on the taskbar, Start menu and shortcuts, since Windows caches icons by
+; file path and the path doesn't change.
+ChangesAssociations=yes
 WizardStyle=modern
 Compression=lzma2/ultra64
 SolidCompression=yes
