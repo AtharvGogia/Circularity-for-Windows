@@ -260,6 +260,7 @@ internal static class ReadmeMedia
         private Border? _toast;
         private Rectangle? _wallpaper, _wallpaperNext;
         private Border? _taskbar;
+        private Image? _trayIcon;
         private AppTheme _desktopTheme = AppTheme.Dark;
         private Canvas? _explorer;
         private Point _explorerAt, _filesAt;
@@ -390,7 +391,8 @@ internal static class ReadmeMedia
 
             var tray = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 10, 0) };
             tray.Children.Add(Spaced(Glyph(0xE70E, 11, fg), 10));
-            tray.Children.Add(Spaced(new Image { Source = AppImage(darkDisc: !dark), Width = 16, Height = 16 }, 12));
+            _trayIcon = new Image { Source = AppImage(_settings.Accent, darkDisc: !dark), Width = 16, Height = 16 };
+            tray.Children.Add(Spaced(_trayIcon, 12));
             tray.Children.Add(Spaced(Glyph(0xE701, 14, fg), 8));
             tray.Children.Add(Spaced(Glyph(0xE767, 14, fg), 8));
             tray.Children.Add(Spaced(Glyph(0xE83F, 14, fg), 12));
@@ -457,7 +459,7 @@ internal static class ReadmeMedia
         }
 
         /// <summary>The tray icon: the white version on a dark taskbar or notification, the charcoal one on a light taskbar.</summary>
-        private static ImageSource AppImage(bool darkDisc) => AppIcon.Draw(new Settings().Accent, darkDisc, 32);
+        private static ImageSource AppImage(Color accent, bool darkDisc) => AppIcon.Draw(accent, darkDisc, 32);
 
         // --- File Explorer ---
 
@@ -771,7 +773,7 @@ internal static class ReadmeMedia
 
         /// <summary>
         /// A new accent and theme. When the theme changes, the wallpaper crossfades and the taskbar
-        /// switches too, the way Windows does in light and dark mode.
+        /// switches too, the way Windows does in light and dark mode; the tray icon takes the accent.
         /// </summary>
         public void Restyle(string accent, AppTheme theme, Point center)
         {
@@ -801,6 +803,10 @@ internal static class ReadmeMedia
                 Canvas.SetLeft(_taskbar, 0);
                 Canvas.SetTop(_taskbar, ReadmeMedia.Height - TaskbarHeight);
             }
+
+            // The tray icon follows too, as in the app: the new accent, white on a dark taskbar and charcoal on a light one.
+            if (_trayIcon != null)
+                _trayIcon.Source = AppImage(_settings.Accent, darkDisc: theme != AppTheme.Dark);
         }
 
         // --- Pointer, drag and keys ---
@@ -936,7 +942,7 @@ internal static class ReadmeMedia
                             Children =
                             {
                                 Docked(Glyph(0xE8BB, 10, 0xB0FFFFFF), Dock.Right),
-                                Docked(new Image { Source = AppImage(darkDisc: false), Width = 16, Height = 16, Margin = new Thickness(0, 0, 8, 0) }, Dock.Left),
+                                Docked(new Image { Source = AppImage(_settings.Accent, darkDisc: false), Width = 16, Height = 16, Margin = new Thickness(0, 0, 8, 0) }, Dock.Left),
                                 Text("Circularity", 12, 0xC0FFFFFF),
                             },
                         },
