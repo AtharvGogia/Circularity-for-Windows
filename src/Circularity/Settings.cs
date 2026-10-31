@@ -11,6 +11,9 @@ namespace Circularity;
 /// <summary>User preferences, stored as JSON in %APPDATA%\Circularity\settings.json.</summary>
 internal sealed class Settings
 {
+    /// <summary>Current settings schema version. Increment when adding fields that need migration.</summary>
+    public const int CurrentVersion = 2;
+
     public const int MinWheelSize = 200;
     public const int MaxWheelSize = 360;
     /// <summary>Circularity's own colour: violet since 0.5.2, orange before.</summary>
@@ -18,6 +21,9 @@ internal sealed class Settings
 
     /// <summary>The default up to 0.5.0, which settings from then still hold when it was never changed.</summary>
     private const string OldDefaultAccent = "#FF8A1E";
+
+    /// <summary>Settings schema version. Missing = 1 (pre-versioning).</summary>
+    public int Version { get; set; } = CurrentVersion;
 
     /// <summary>Wheel diameter in device-independent pixels.</summary>
     public int WheelSize { get; set; } = 260;
@@ -78,7 +84,11 @@ internal sealed class Settings
     public static readonly string FilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Circularity", "settings.json");
 
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new()
+{
+    WriteIndented = true,
+    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+};
 
     public Color Accent
     {
@@ -119,7 +129,7 @@ internal sealed class Settings
     }
 
     /// <summary>Settings as saved, brought up to date (also used by the tests).</summary>
-    internal static Settings FromJson(string json) => JsonSerializer.Deserialize<Settings>(json)?.Normalized() ?? new Settings();
+    internal static Settings FromJson(string json) => JsonSerializer.Deserialize<Settings>(json, JsonOptions)?.Migrate() ?? new Settings();
 
     public void Save()
     {
@@ -132,6 +142,18 @@ internal sealed class Settings
         {
             Log.Write($"Couldn't save settings: {ex.Message}");
         }
+    }
+
+    /// <summary>Migrates settings from older versions to current.</summary>
+    internal Settings Migrate()
+    {
+        // Version 1 -> 2: Added Version field, CopyToClipboardOnFinish default false (already default)
+        if (Version < 2)
+        {
+            Version = 2;
+            // CopyToClipboardOnFinish defaults to false, which is correct for v1->2
+        }
+        return Normalized();
     }
 
     /// <summary>Clamps values from a hand-edited or older settings file into range.</summary>

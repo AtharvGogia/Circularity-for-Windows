@@ -3,7 +3,7 @@ using Microsoft.Win32;
 
 namespace Circularity;
 
-internal enum AppTheme { System, Light, Dark }
+public enum AppTheme { System, Light, Dark }
 
 internal static class Theme
 {
