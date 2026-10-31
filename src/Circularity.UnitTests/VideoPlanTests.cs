@@ -57,7 +57,9 @@ public class VideoPlanTests
     [InlineData(1920, 1080, 120, true)]     // 120fps capped at 60
     [InlineData(1920, 1080, 24, true)]      // 24fps kept
     [InlineData(1920, 1080, 30, true)]      // 30fps kept
+#pragma warning disable xUnit1026 // Theory method does not use parameter
     public void PlanCompression_CapsFpsAt60(int w, int h, double fps, bool hasAudio)
+#pragma warning restore xUnit1026
     {
         var info = new MediaInfo(TimeSpan.FromSeconds(30), 1920, 1080, fps, 8_000_000, hasAudio);
         var spec = new CompressSpec(Quality: 60);

@@ -33,7 +33,9 @@ public class ResizeSpecTests
     [InlineData(ResizeKind.Fit, 600, 800, 400, 400, 300, 400)]        // taller than wide target
     [InlineData(ResizeKind.Stretch, 800, 600, 400, 300, 400, 300)]    // exact stretch
     [InlineData(ResizeKind.Stretch, 800, 600, 400, 400, 400, 400)]    // stretch ignores ratio
+#pragma warning disable xUnit1026 // Theory method does not use parameter
     public void FittedSize_ReturnsSameAsApply_ForFitAndStretch(ResizeKind kind, int srcW, int srcH, int targetW, int targetH, int expectedW, int expectedH)
+#pragma warning restore xUnit1026
     {
         var spec = new ResizeSpec(kind, targetW, targetH, ImageScale: 1.0);
         var (w1, h1) = spec.Apply(srcW, srcH);
