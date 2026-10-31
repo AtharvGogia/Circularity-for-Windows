@@ -139,12 +139,190 @@ internal sealed class ImageConverter : IConverter
 
         image = operation switch
         {
-            ResizeTo resize => Resize(image, resize.Spec.Apply(image.PixelWidth, image.PixelHeight)),
+            ResizeTo resize => ResizeWithBackground(image, resize.Spec),
             CropTo crop => Crop(image, crop.Rect),
             _ => image,
         };
         Save(image, format, outputPath);
         return HasAlpha(image);
+    }
+
+    /// <summary>Resizes an image with optional background fill for FitWithBackground mode.</summary>
+    private static BitmapSource ResizeWithBackground(BitmapSource source, ResizeSpec spec)
+    {
+        // For Fit and Stretch, use the existing simple resize
+        if (spec.Kind != ResizeKind.FitWithBackground)
+        {
+            var size = spec.Apply(source.PixelWidth, source.PixelHeight);
+            return Resize(source, size);
+        }
+
+        // FitWithBackground: create canvas of target size, draw background, then draw fitted image
+        int canvasWidth = spec.Width;
+        int canvasHeight = spec.Height;
+        var fittedSize = spec.FittedSize(source.PixelWidth, source.PixelHeight);
+
+        // Apply image scale to the fitted size
+        int imgWidth = Math.Max(1, (int)Math.Round(fittedSize.Width * spec.ImageScale));
+        int imgHeight = Math.Max(1, (int)Math.Round(fittedSize.Height * spec.ImageScale));
+
+        // Center the image on the canvas
+        int x = (canvasWidth - imgWidth) / 2;
+        int y = (canvasHeight - imgHeight) / 2;
+
+        var visual = new DrawingVisual();
+        RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.HighQuality);
+        using (var dc = visual.RenderOpen())
+        {
+            // Draw background
+            if (spec.Background != null)
+                DrawBackground(dc, spec.Background, canvasWidth, canvasHeight, source);
+
+            // Draw the fitted/scaled image
+            dc.DrawImage(source, new Rect(x, y, imgWidth, imgHeight));
+        }
+
+        var target = new RenderTargetBitmap(canvasWidth, canvasHeight, 96, 96, PixelFormats.Pbgra32);
+        target.Render(visual);
+        return target;
+    }
+
+    /// <summary>Draws the background for FitWithBackground mode.</summary>
+    private static void DrawBackground(DrawingContext dc, ResizeBackground bg, int canvasWidth, int canvasHeight, BitmapSource source)
+    {
+        var rect = new Rect(0, 0, canvasWidth, canvasHeight);
+
+        switch (bg.Kind)
+        {
+            case ResizeBackgroundKind.Color:
+                if (bg.Color is Color c)
+                    dc.DrawRectangle(new SolidColorBrush(c), null, rect);
+                break;
+
+            case ResizeBackgroundKind.Gradient:
+                if (bg.GradientStart is Color start && bg.GradientEnd is Color end)
+                {
+                    Point startPoint, endPoint;
+
+                    // Use GradientAngle if set (non-zero), otherwise fall back to GradientDirection
+                    if (bg.GradientAngle != 0)
+                    {
+                        double rad = bg.GradientAngle * Math.PI / 180.0;
+                        // Start point at angle direction from center, end point opposite
+                        startPoint = new Point(0.5 + 0.5 * Math.Cos(rad), 0.5 - 0.5 * Math.Sin(rad));
+                        endPoint = new Point(0.5 - 0.5 * Math.Cos(rad), 0.5 + 0.5 * Math.Sin(rad));
+                    }
+                    else
+                    {
+                        switch (bg.GradientDirection)
+                        {
+                            case GradientDirection.Vertical:
+                                startPoint = new Point(0, 0);
+                                endPoint = new Point(0, 1);
+                                break;
+                            case GradientDirection.DiagonalUp:
+                                startPoint = new Point(0, 1);
+                                endPoint = new Point(1, 0);
+                                break;
+                            case GradientDirection.DiagonalDown:
+                                startPoint = new Point(0, 0);
+                                endPoint = new Point(1, 1);
+                                break;
+                            default: // Horizontal
+                                startPoint = new Point(0, 0);
+                                endPoint = new Point(1, 0);
+                                break;
+                        }
+                    }
+                    var brush = new LinearGradientBrush(start, end, startPoint, endPoint);
+                    dc.DrawRectangle(brush, null, rect);
+                }
+                break;
+
+            case ResizeBackgroundKind.BlurredSource:
+                // Create a blurred version of the source scaled to fill the canvas
+                var blurred = CreateBlurredBackground(source, canvasWidth, canvasHeight, bg.BlurRadius, bg.Scale);
+                dc.DrawImage(blurred, rect);
+                break;
+        }
+    }
+
+    /// <summary>Creates a blurred, scaled version of the source image to fill the canvas.</summary>
+    private static BitmapSource CreateBlurredBackground(BitmapSource source, int canvasWidth, int canvasHeight, double blurRadius, double scale)
+    {
+        // First, scale the source to fill the canvas (cover mode)
+        double scaleX = (double)canvasWidth / source.PixelWidth;
+        double scaleY = (double)canvasHeight / source.PixelHeight;
+        double coverScale = Math.Max(scaleX, scaleY) * scale;
+
+        int blurWidth = Math.Max(1, (int)Math.Round(source.PixelWidth * coverScale));
+        int blurHeight = Math.Max(1, (int)Math.Round(source.PixelHeight * coverScale));
+
+        // Render scaled source
+        var visual = new DrawingVisual();
+        RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.HighQuality);
+        using (var dc = visual.RenderOpen())
+        {
+            dc.DrawImage(source, new Rect(0, 0, blurWidth, blurHeight));
+        }
+        var scaled = new RenderTargetBitmap(blurWidth, blurHeight, 96, 96, PixelFormats.Pbgra32);
+        scaled.Render(visual);
+
+        // Apply blur using downsample/upsample with ping-pong buffers
+        // Downsample to 1/4 size (creates initial blur)
+        int smallW = Math.Max(1, blurWidth / 4);
+        int smallH = Math.Max(1, blurHeight / 4);
+
+        var smallVisual = new DrawingVisual();
+        using (var dc = smallVisual.RenderOpen())
+        {
+            dc.DrawImage(scaled, new Rect(0, 0, smallW, smallH));
+        }
+        var small = new RenderTargetBitmap(smallW, smallH, 96, 96, PixelFormats.Pbgra32);
+        small.Render(smallVisual);
+
+        // Ping-pong buffers for blur passes
+        var current = new RenderTargetBitmap(canvasWidth, canvasHeight, 96, 96, PixelFormats.Pbgra32);
+        var next = new RenderTargetBitmap(canvasWidth, canvasHeight, 96, 96, PixelFormats.Pbgra32);
+
+        // Initial upsample with bilinear (creates blur)
+        var blurVisual = new DrawingVisual();
+        RenderOptions.SetBitmapScalingMode(blurVisual, BitmapScalingMode.Linear);
+        using (var dc = blurVisual.RenderOpen())
+        {
+            dc.DrawImage(small, new Rect(0, 0, canvasWidth, canvasHeight));
+        }
+        current.Render(blurVisual);
+
+        // Additional blur passes (each roughly doubles the blur radius)
+        int passes = Math.Max(1, (int)Math.Round(blurRadius / 25.0));
+        for (int i = 1; i < passes; i++)
+        {
+            var passVisual = new DrawingVisual();
+            RenderOptions.SetBitmapScalingMode(passVisual, BitmapScalingMode.Linear);
+            using (var dc = passVisual.RenderOpen())
+            {
+                dc.DrawImage(current, new Rect(0, 0, canvasWidth, canvasHeight));
+            }
+            next.Render(passVisual);
+
+            // Swap buffers
+            (current, next) = (next, current);
+        }
+
+        return current;
+    }
+
+    private static BitmapSource Resize(BitmapSource image, (int Width, int Height) size)
+    {
+        var visual = new DrawingVisual();
+        RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.HighQuality);
+        using (var dc = visual.RenderOpen())
+            dc.DrawImage(image, new Rect(0, 0, size.Width, size.Height));
+
+        var target = new RenderTargetBitmap(size.Width, size.Height, 96, 96, PixelFormats.Pbgra32);
+        target.Render(visual);
+        return target;
     }
 
     /// <summary>Saves a tiny HEIC in memory, on a thread of its own (WIC wants a single-threaded apartment).</summary>
@@ -338,18 +516,6 @@ internal sealed class ImageConverter : IConverter
     {
         using var svg = OpenSvg(path, out var bounds);
         return SvgOutputSize(bounds);
-    }
-
-    private static BitmapSource Resize(BitmapSource image, (int Width, int Height) size)
-    {
-        var visual = new DrawingVisual();
-        RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.HighQuality);
-        using (var dc = visual.RenderOpen())
-            dc.DrawImage(image, new Rect(0, 0, size.Width, size.Height));
-
-        var target = new RenderTargetBitmap(size.Width, size.Height, 96, 96, PixelFormats.Pbgra32);
-        target.Render(visual);
-        return target;
     }
 
     /// <summary>JPEG bytes at the requested quality, or the best quality that fits the size limit.</summary>

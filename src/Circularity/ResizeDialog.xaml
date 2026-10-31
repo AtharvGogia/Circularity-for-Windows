@@ -2,8 +2,9 @@
         x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Circularity"
         Title="Resize"
-        Width="420" SizeToContent="Height"
+        Width="460" SizeToContent="Height"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
         Topmost="True"
@@ -24,7 +25,127 @@
             </StackPanel>
             <TextBlock Text="px" VerticalAlignment="Bottom" Margin="8,0,0,8" />
         </StackPanel>
-        <CheckBox x:Name="KeepAspect" Content="Keep aspect ratio" IsChecked="True" Margin="0,12,0,0" />
+
+        <StackPanel x:Name="ModePanel" Margin="0,12,0,0">
+            <TextBlock Text="Mode" Opacity="0.8" Margin="0,0,0,4" />
+            <ComboBox x:Name="ModeBox" SelectionChanged="Mode_Changed">
+                <ComboBoxItem Tag="Fit" IsSelected="True">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Fit inside" FontWeight="SemiBold" />
+                        <TextBlock Text=" — keep aspect ratio, fill background" Opacity="0.7" Margin="8,0,0,0" />
+                    </StackPanel>
+                </ComboBoxItem>
+                <ComboBoxItem Tag="Stretch">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Stretch" FontWeight="SemiBold" />
+                        <TextBlock Text=" — exact size, ignore aspect ratio" Opacity="0.7" Margin="8,0,0,0" />
+                    </StackPanel>
+                </ComboBoxItem>
+                <ComboBoxItem Tag="FitWithBackground">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Fit with background" FontWeight="SemiBold" />
+                        <TextBlock Text=" — keep aspect ratio, custom background" Opacity="0.7" Margin="8,0,0,0" />
+                    </StackPanel>
+                </ComboBoxItem>
+            </ComboBox>
+        </StackPanel>
+
+        <!-- FitWithBackground options -->
+        <StackPanel x:Name="BackgroundPanel" Margin="0,12,0,0" Visibility="Collapsed">
+            <TextBlock Text="Background" Opacity="0.8" Margin="0,0,0,4" />
+            <ComboBox x:Name="BackgroundKindBox" SelectionChanged="BackgroundKind_Changed">
+                <ComboBoxItem Tag="Color" IsSelected="True">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Solid color" FontWeight="SemiBold" />
+                    </StackPanel>
+                </ComboBoxItem>
+                <ComboBoxItem Tag="Gradient">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Gradient" FontWeight="SemiBold" />
+                    </StackPanel>
+                </ComboBoxItem>
+                <ComboBoxItem Tag="BlurredSource">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Blurred original" FontWeight="SemiBold" />
+                    </StackPanel>
+                </ComboBoxItem>
+            </ComboBox>
+
+            <!-- Solid color picker -->
+            <StackPanel x:Name="ColorPanel" Margin="0,8,0,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Color" Opacity="0.8" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <local:ColorPickerButton x:Name="ColorPicker" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Gradient options -->
+            <StackPanel x:Name="GradientPanel" Margin="0,8,0,0" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock Text="Start" Opacity="0.8" VerticalAlignment="Center" Margin="0,0,8,0" Width="50" />
+                    <local:ColorPickerButton x:Name="GradientStartPicker" Width="200" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock Text="End" Opacity="0.8" VerticalAlignment="Center" Margin="0,0,8,0" Width="50" />
+                    <local:ColorPickerButton x:Name="GradientEndPicker" Width="200" />
+                </StackPanel>
+
+                <!-- Gradient preview -->
+                <Border x:Name="GradientPreview" Height="30" Margin="0,0,0,8" BorderBrush="Gray" BorderThickness="1" CornerRadius="3">
+                    <Border.Background>
+                        <LinearGradientBrush x:Name="GradientPreviewBrush" StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop x:Name="GradientPreviewStart" Color="White" Offset="0" />
+                            <GradientStop x:Name="GradientPreviewEnd" Color="LightGray" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+
+                <!-- Preset color combinations -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock Text="Presets" Opacity="0.8" VerticalAlignment="Center" Margin="0,0,8,0" Width="50" />
+                    <ComboBox x:Name="GradientPresetBox" Width="200" SelectionChanged="GradientPreset_Changed" SelectedIndex="0">
+                        <ComboBoxItem Content="Custom" IsSelected="True" />
+                        <ComboBoxItem Content="Violet → Blue" Tag="#8B5CF6;#3B82F6" />
+                        <ComboBoxItem Content="Blue → Cyan" Tag="#3B82F6;#06B6D4" />
+                        <ComboBoxItem Content="Pink → Orange" Tag="#EC4899;#F97316" />
+                        <ComboBoxItem Content="Green → Lime" Tag="#22C55E;#A3E635" />
+                        <ComboBoxItem Content="Dark → Light Gray" Tag="#1F2937;#9CA3AF" />
+                        <ComboBoxItem Content="Sunset" Tag="#EF4444;#FBBF24" />
+                        <ComboBoxItem Content="Ocean" Tag="#0EA5E9;#14B8A6" />
+                        <ComboBoxItem Content="Forest" Tag="#166534;#65A30D" />
+                        <ComboBoxItem Content="Warm" Tag="#DC2626;#EA580C" />
+                        <ComboBoxItem Content="Cool" Tag="#2563EB;#7C3AED" />
+                    </ComboBox>
+                </StackPanel>
+
+                <!-- Angle slider -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock Text="Angle" Opacity="0.8" VerticalAlignment="Center" Margin="0,0,8,0" Width="50" />
+                    <Slider x:Name="GradientAngleSlider" Minimum="0" Maximum="359" Value="0" TickFrequency="45" Width="200" ValueChanged="GradientAngle_ValueChanged" />
+                    <TextBlock x:Name="GradientAngleValueText" Text="0°" Opacity="0.8" VerticalAlignment="Center" Margin="8,0,0,0" Width="40" TextAlignment="Right" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Blurred source options -->
+            <StackPanel x:Name="BlurPanel" Margin="0,8,0,0" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Blur radius" Opacity="0.8" VerticalAlignment="Center" Margin="0,0,8,0" Width="90" />
+                    <Slider x:Name="BlurSlider" Minimum="1" Maximum="200" Value="50" TickFrequency="10" IsSnapToTickEnabled="True" Width="200" ValueChanged="Blur_ValueChanged" />
+                    <TextBlock x:Name="BlurValueText" Text="50" Opacity="0.8" VerticalAlignment="Center" Margin="8,0,0,0" Width="40" TextAlignment="Right" />
+                </StackPanel>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Image scale within canvas (for Fit and FitWithBackground) -->
+        <StackPanel x:Name="ScalePanel" Margin="0,12,0,0" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Image scale" Opacity="0.8" VerticalAlignment="Center" Margin="0,0,8,0" Width="90" />
+                <Slider x:Name="ScaleSlider" Minimum="0.1" Maximum="2.0" Value="1.0" TickFrequency="0.1" IsSnapToTickEnabled="True" Width="200" ValueChanged="Scale_ValueChanged" />
+                <TextBlock x:Name="ScaleValueText" Text="100%" Opacity="0.8" VerticalAlignment="Center" Margin="8,0,0,0" Width="50" TextAlignment="Right" />
+            </StackPanel>
+        </StackPanel>
+
+        <CheckBox x:Name="KeepAspect" Content="Keep aspect ratio" IsChecked="True" Margin="0,12,0,0" Visibility="Collapsed" />
 
         <TextBlock x:Name="ResultText" Margin="0,16,0,0" Opacity="0.8" TextWrapping="Wrap" />
 

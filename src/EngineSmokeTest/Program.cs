@@ -125,7 +125,7 @@ internal static class Program
             await OutputFolderChecks(queue, dir, image);
             await HeicAvifOutputChecks(queue, ffmpeg, dir, photo);
 
-            // The default colour moved from orange to violet in 0.5.1: settings still on the old default
+            // The default colour moved from orange to violet in 0.5.2: settings still on the old default
             // move with it, but an orange someone picked (or any other colour) stays.
             Check("settings left on the old orange default become violet",
                 Settings.FromJson("{\"AccentColor\":\"#FF8A1E\"}").AccentColor == Settings.DefaultAccent, Settings.FromJson("{\"AccentColor\":\"#FF8A1E\"}").AccentColor);

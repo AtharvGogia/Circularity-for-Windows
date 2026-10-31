@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Windows.Media;
 
 namespace Circularity.Engine;
 
@@ -72,12 +73,67 @@ internal enum ResizeKind
 
     /// <summary>Exactly Width × Height, ignoring the aspect ratio.</summary>
     Stretch,
+
+    /// <summary>Fits inside Width × Height keeping aspect ratio, then fills remaining canvas with a background.</summary>
+    FitWithBackground,
 }
 
-internal sealed record ResizeSpec(ResizeKind Kind, int Width, int Height)
+/// <summary>Background fill mode for FitWithBackground.</summary>
+internal enum ResizeBackgroundKind
+{
+    /// <summary>Solid color fill.</summary>
+    Color,
+
+    /// <summary>Linear gradient fill.</summary>
+    Gradient,
+
+    /// <summary>Blurred copy of the source image.</summary>
+    BlurredSource,
+}
+
+/// <summary>Gradient direction for background (legacy, kept for compatibility).</summary>
+internal enum GradientDirection
+{
+    Horizontal,
+    Vertical,
+    DiagonalUp,
+    DiagonalDown,
+}
+
+/// <summary>Describes how to fill the canvas background when the resized image doesn't fill it.</summary>
+internal sealed record ResizeBackground(
+    ResizeBackgroundKind Kind = ResizeBackgroundKind.Color,
+    Color? Color = null,
+    Color? GradientStart = null,
+    Color? GradientEnd = null,
+    GradientDirection GradientDirection = GradientDirection.Horizontal,
+    double GradientAngle = 0, // Angle in degrees (0-359), overrides GradientDirection when non-zero
+    double BlurRadius = 50,
+    double Scale = 1.0) // Scale of the fitted image within the canvas (0.1 to 2.0)
+{
+    public static ResizeBackground Solid(Color color) => new(ResizeBackgroundKind.Color, Color: color);
+    public static ResizeBackground Gradient(Color start, Color end, GradientDirection dir = GradientDirection.Horizontal) =>
+        new(ResizeBackgroundKind.Gradient, GradientStart: start, GradientEnd: end, GradientDirection: dir);
+    public static ResizeBackground Gradient(Color start, Color end, double angle) =>
+        new(ResizeBackgroundKind.Gradient, GradientStart: start, GradientEnd: end, GradientAngle: angle);
+    public static ResizeBackground Blurred(double radius = 50, double scale = 1.0) =>
+        new(ResizeBackgroundKind.BlurredSource, BlurRadius: radius, Scale: scale);
+}
+
+internal sealed record ResizeSpec(ResizeKind Kind, int Width, int Height, ResizeBackground? Background = null, double ImageScale = 1.0)
 {
     /// <summary>The new size for a source of the given size.</summary>
     public (int Width, int Height) Apply(int width, int height)
+    {
+        if (Kind == ResizeKind.Stretch)
+            return (Math.Max(1, Width), Math.Max(1, Height));
+
+        double scale = Math.Min((double)Width / width, (double)Height / height);
+        return (Math.Max(1, (int)Math.Round(width * scale)), Math.Max(1, (int)Math.Round(height * scale)));
+    }
+
+    /// <summary>Gets the fitted image size (before ImageScale is applied).</summary>
+    public (int Width, int Height) FittedSize(int width, int height)
     {
         if (Kind == ResizeKind.Stretch)
             return (Math.Max(1, Width), Math.Max(1, Height));
