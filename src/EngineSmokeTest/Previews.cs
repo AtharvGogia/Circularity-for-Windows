@@ -129,8 +129,13 @@ internal static class Previews
                 // animations have finished by the time the snapshot is taken.
                 var host = new Window
                 {
-                    Content = desktopBg, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None,
-                    Left = -20000, Top = -20000, ShowActivated = false, ShowInTaskbar = false,
+                    Content = desktopBg,
+                    SizeToContent = SizeToContent.WidthAndHeight,
+                    WindowStyle = WindowStyle.None,
+                    Left = -20000,
+                    Top = -20000,
+                    ShowActivated = false,
+                    ShowInTaskbar = false,
                 };
                 host.Show();
                 Settle(400);

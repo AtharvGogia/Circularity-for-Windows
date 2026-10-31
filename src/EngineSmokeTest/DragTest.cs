@@ -46,15 +46,28 @@ internal static class DragTest
         var work = SystemParameters.WorkArea;
         var source = new Window
         {
-            Width = 160, Height = 100, Left = work.Left + 80, Top = work.Top + 200,
-            WindowStyle = WindowStyle.ToolWindow, Topmost = true, Title = "drag source",
-            Background = Brushes.SteelBlue, ShowInTaskbar = false,
+            Width = 160,
+            Height = 100,
+            Left = work.Left + 80,
+            Top = work.Top + 200,
+            WindowStyle = WindowStyle.ToolWindow,
+            Topmost = true,
+            Title = "drag source",
+            Background = Brushes.SteelBlue,
+            ShowInTaskbar = false,
         };
         var catcher = new Window
         {
-            Width = 700, Height = 600, Left = work.Left + 300, Top = work.Top + 60,
-            WindowStyle = WindowStyle.None, Topmost = true, AllowDrop = true, ShowInTaskbar = false,
-            Background = new SolidColorBrush(Color.FromArgb(0x30, 0x80, 0x80, 0x80)), Title = "catcher",
+            Width = 700,
+            Height = 600,
+            Left = work.Left + 300,
+            Top = work.Top + 60,
+            WindowStyle = WindowStyle.None,
+            Topmost = true,
+            AllowDrop = true,
+            ShowInTaskbar = false,
+            Background = new SolidColorBrush(Color.FromArgb(0x30, 0x80, 0x80, 0x80)),
+            Title = "catcher",
         };
         bool caught = false;
         catcher.DragOver += (_, e) => { e.Effects = DragDropEffects.Copy; e.Handled = true; };
