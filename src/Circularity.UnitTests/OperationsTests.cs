@@ -33,7 +33,7 @@ public class ResizeSpecTests
     [InlineData(ResizeKind.Fit, 600, 800, 400, 400, 300, 400)]        // taller than wide target
     [InlineData(ResizeKind.Stretch, 800, 600, 400, 300, 400, 300)]    // exact stretch
     [InlineData(ResizeKind.Stretch, 800, 600, 400, 400, 400, 400)]    // stretch ignores ratio
-    public void FittedSize_ReturnsSameAsApply_ForFitAndStretch(ResizeKind kind, int srcW, int srcH, int targetW, int targetH, int expectedH)
+    public void FittedSize_ReturnsSameAsApply_ForFitAndStretch(ResizeKind kind, int srcW, int srcH, int targetW, int targetH, int expectedW, int expectedH)
     {
         var spec = new ResizeSpec(kind, targetW, targetH, ImageScale: 1.0);
         var (w1, h1) = spec.Apply(srcW, srcH);
