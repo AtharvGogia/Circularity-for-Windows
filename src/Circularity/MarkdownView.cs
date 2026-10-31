@@ -140,17 +140,17 @@ internal static class MarkdownView
             case LineBreakInline lineBreak:
                 return lineBreak.IsHard ? new LineBreak() : new Run(" ");
             case EmphasisInline emphasis:
-            {
-                var span = new Span();
-                AddInlines(span.Inlines, emphasis);
-                if (emphasis.DelimiterChar == '~')
-                    span.TextDecorations = TextDecorations.Strikethrough;
-                else if (emphasis.DelimiterCount >= 2)
-                    span.FontWeight = FontWeights.SemiBold;
-                else
-                    span.FontStyle = FontStyles.Italic;
-                return span;
-            }
+                {
+                    var span = new Span();
+                    AddInlines(span.Inlines, emphasis);
+                    if (emphasis.DelimiterChar == '~')
+                        span.TextDecorations = TextDecorations.Strikethrough;
+                    else if (emphasis.DelimiterCount >= 2)
+                        span.FontWeight = FontWeights.SemiBold;
+                    else
+                        span.FontStyle = FontStyles.Italic;
+                    return span;
+                }
             case LinkInline { IsImage: true } image:
                 // No pictures in the window; their description stands in for them.
                 return new Run(PlainText(image));
@@ -159,11 +159,11 @@ internal static class MarkdownView
             case AutolinkInline autolink:
                 return Link(autolink.Url, span => span.Inlines.Add(new Run(autolink.Url)));
             case ContainerInline container:
-            {
-                var span = new Span();
-                AddInlines(span.Inlines, container);
-                return span;
-            }
+                {
+                    var span = new Span();
+                    AddInlines(span.Inlines, container);
+                    return span;
+                }
             default:
                 // HTML tags and the like: left out.
                 return new Run();

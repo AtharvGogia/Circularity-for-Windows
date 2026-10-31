@@ -85,10 +85,10 @@ internal sealed class Settings
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Circularity", "settings.json");
 
     private static readonly JsonSerializerOptions JsonOptions = new()
-{
-    WriteIndented = true,
-    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-};
+    {
+        WriteIndented = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+    };
 
     public Color Accent
     {

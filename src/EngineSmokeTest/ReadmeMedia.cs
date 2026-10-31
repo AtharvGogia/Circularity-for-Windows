@@ -233,14 +233,23 @@ internal static class ReadmeMedia
 
     private static TextBlock Text(string text, double size, uint color, FontWeight? weight = null) => new()
     {
-        Text = text, FontSize = size, FontFamily = Ui, Foreground = Brush(color), FontWeight = weight ?? FontWeights.Normal,
-        VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
+        Text = text,
+        FontSize = size,
+        FontFamily = Ui,
+        Foreground = Brush(color),
+        FontWeight = weight ?? FontWeights.Normal,
+        VerticalAlignment = VerticalAlignment.Center,
+        TextTrimming = TextTrimming.CharacterEllipsis,
     };
 
     private static TextBlock Glyph(int code, double size, uint color) => new()
     {
-        Text = char.ConvertFromUtf32(code), FontFamily = Icons, FontSize = size, Foreground = Brush(color),
-        VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center,
+        Text = char.ConvertFromUtf32(code),
+        FontFamily = Icons,
+        FontSize = size,
+        Foreground = Brush(color),
+        VerticalAlignment = VerticalAlignment.Center,
+        HorizontalAlignment = HorizontalAlignment.Center,
     };
 
     /// <summary>An offscreen window holding the scene, so WPF runs its animations; frames are captured in real time.</summary>
@@ -287,8 +296,13 @@ internal static class ReadmeMedia
             var root = new Grid { Width = ReadmeMedia.Width, Height = ReadmeMedia.Height, Children = { _desktop, _overlay } };
             _window = new Window
             {
-                Content = root, SizeToContent = SizeToContent.WidthAndHeight, WindowStyle = WindowStyle.None,
-                Left = -20000, Top = -20000, ShowActivated = false, ShowInTaskbar = false,
+                Content = root,
+                SizeToContent = SizeToContent.WidthAndHeight,
+                WindowStyle = WindowStyle.None,
+                Left = -20000,
+                Top = -20000,
+                ShowActivated = false,
+                ShowInTaskbar = false,
             };
             _window.Show();
         }
@@ -375,11 +389,15 @@ internal static class ReadmeMedia
             apps.Children.Add(TaskbarButton(StartLogo(), false, dark));
             apps.Children.Add(new Border
             {
-                Width = 150, Height = 32, Margin = new Thickness(4, 0, 4, 0), CornerRadius = new CornerRadius(16),
+                Width = 150,
+                Height = 32,
+                Margin = new Thickness(4, 0, 4, 0),
+                CornerRadius = new CornerRadius(16),
                 Background = Brush(dark ? 0x22FFFFFFu : 0x0F000000u),
                 Child = new StackPanel
                 {
-                    Orientation = Orientation.Horizontal, Margin = new Thickness(12, 0, 0, 0),
+                    Orientation = Orientation.Horizontal,
+                    Margin = new Thickness(12, 0, 0, 0),
                     Children = { Glyph(0xE721, 13, fg), new TextBlock { Text = "Search", FontFamily = Ui, FontSize = 12, Foreground = Brush(dark ? 0xB0FFFFFFu : 0xA0000000u), Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center } },
                 },
             });
@@ -409,9 +427,12 @@ internal static class ReadmeMedia
 
             return new Border
             {
-                Width = ReadmeMedia.Width, Height = TaskbarHeight, Child = bar,
+                Width = ReadmeMedia.Width,
+                Height = TaskbarHeight,
+                Child = bar,
                 Background = Brush(dark ? 0xEC1C1C1Cu : 0xEEF3F3F3u),
-                BorderBrush = Brush(dark ? 0x30FFFFFFu : 0x18000000u), BorderThickness = new Thickness(0, 1, 0, 0),
+                BorderBrush = Brush(dark ? 0x30FFFFFFu : 0x18000000u),
+                BorderThickness = new Thickness(0, 1, 0, 0),
             };
         }
 
@@ -429,14 +450,23 @@ internal static class ReadmeMedia
             {
                 inner.Children.Add(new Border
                 {
-                    Width = 16, Height = 3, CornerRadius = new CornerRadius(1.5), Background = Brush(0xFF60CDFF),
-                    VerticalAlignment = VerticalAlignment.Bottom, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, -2),
+                    Width = 16,
+                    Height = 3,
+                    CornerRadius = new CornerRadius(1.5),
+                    Background = Brush(0xFF60CDFF),
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 0, 0, -2),
                 });
             }
             return new Border
             {
-                Width = 40, Height = 40, Margin = new Thickness(2, 0, 2, 0), CornerRadius = new CornerRadius(4),
-                Background = running ? Brush(dark ? 0x18FFFFFFu : 0x0C000000u) : Brushes.Transparent, Child = inner,
+                Width = 40,
+                Height = 40,
+                Margin = new Thickness(2, 0, 2, 0),
+                CornerRadius = new CornerRadius(4),
+                Background = running ? Brush(dark ? 0x18FFFFFFu : 0x0C000000u) : Brushes.Transparent,
+                Child = inner,
             };
         }
 
@@ -448,7 +478,9 @@ internal static class ReadmeMedia
             {
                 var pane = new Border
                 {
-                    Width = 8.4, Height = 8.4, CornerRadius = new CornerRadius(1),
+                    Width = 8.4,
+                    Height = 8.4,
+                    CornerRadius = new CornerRadius(1),
                     Background = new LinearGradientBrush(Color.FromRgb(0x2B, 0xB3, 0xFF), Color.FromRgb(0x0F, 0x6C, 0xDB), 90),
                     HorizontalAlignment = i % 2 == 0 ? HorizontalAlignment.Left : HorizontalAlignment.Right,
                     VerticalAlignment = i < 2 ? VerticalAlignment.Top : VerticalAlignment.Bottom,
@@ -475,8 +507,12 @@ internal static class ReadmeMedia
             var tabRow = new Grid();
             tabRow.Children.Add(new Border
             {
-                Width = 200, Height = 32, Margin = new Thickness(8, 8, 0, 0), HorizontalAlignment = HorizontalAlignment.Left,
-                CornerRadius = new CornerRadius(8, 8, 0, 0), Background = Brush(0xFF2B2B2B),
+                Width = 200,
+                Height = 32,
+                Margin = new Thickness(8, 8, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                CornerRadius = new CornerRadius(8, 8, 0, 0),
+                Background = Brush(0xFF2B2B2B),
                 Child = new DockPanel
                 {
                     Margin = new Thickness(12, 0, 10, 0),
@@ -503,17 +539,26 @@ internal static class ReadmeMedia
             address.Children.Add(Docked(nav, Dock.Left));
             address.Children.Add(Docked(new Border
             {
-                Width = 150, Height = 30, Margin = new Thickness(6, 0, 10, 0), CornerRadius = new CornerRadius(4), Background = Brush(0xFF1F1F1F),
-                BorderBrush = Brush(0x18FFFFFF), BorderThickness = new Thickness(1),
+                Width = 150,
+                Height = 30,
+                Margin = new Thickness(6, 0, 10, 0),
+                CornerRadius = new CornerRadius(4),
+                Background = Brush(0xFF1F1F1F),
+                BorderBrush = Brush(0x18FFFFFF),
+                BorderThickness = new Thickness(1),
                 Child = new DockPanel { Margin = new Thickness(10, 0, 8, 0), Children = { Docked(Glyph(0xE721, 12, 0xB0FFFFFF), Dock.Right), Text($"Search {folder}", 12, 0x90FFFFFF) } },
             }, Dock.Right));
             address.Children.Add(new Border
             {
-                Height = 30, CornerRadius = new CornerRadius(4), Background = Brush(0xFF1F1F1F),
-                BorderBrush = Brush(0x18FFFFFF), BorderThickness = new Thickness(1),
+                Height = 30,
+                CornerRadius = new CornerRadius(4),
+                Background = Brush(0xFF1F1F1F),
+                BorderBrush = Brush(0x18FFFFFF),
+                BorderThickness = new Thickness(1),
                 Child = new StackPanel
                 {
-                    Orientation = Orientation.Horizontal, Margin = new Thickness(10, 0, 0, 0),
+                    Orientation = Orientation.Horizontal,
+                    Margin = new Thickness(10, 0, 0, 0),
                     Children =
                     {
                         Glyph(0xE7F8, 13, 0xFFFFFFFF), WithMargin(Glyph(0xE76C, 9, 0xA0FFFFFF), new Thickness(8, 0, 6, 0)),
@@ -552,11 +597,14 @@ internal static class ReadmeMedia
                 bool here = place.Name == folder;
                 navPane.Children.Add(new Border
                 {
-                    Height = 30, Margin = new Thickness(6, 1, 6, 1), CornerRadius = new CornerRadius(4),
+                    Height = 30,
+                    Margin = new Thickness(6, 1, 6, 1),
+                    CornerRadius = new CornerRadius(4),
                     Background = here ? Brush(0x22FFFFFF) : Brushes.Transparent,
                     Child = new StackPanel
                     {
-                        Orientation = Orientation.Horizontal, Margin = new Thickness(10, 0, 0, 0),
+                        Orientation = Orientation.Horizontal,
+                        Margin = new Thickness(10, 0, 0, 0),
                         Children = { Glyph(place.Glyph, 14, place.Color), WithMargin(Text(place.Name, 12, 0xFFFFFFFF), new Thickness(10, 0, 0, 0)) },
                     },
                 });
@@ -577,8 +625,12 @@ internal static class ReadmeMedia
 
             var frame = new Border
             {
-                Width = W, Height = H, CornerRadius = new CornerRadius(8), ClipToBounds = true,
-                BorderBrush = Brush(0x40FFFFFF), BorderThickness = new Thickness(1),
+                Width = W,
+                Height = H,
+                CornerRadius = new CornerRadius(8),
+                ClipToBounds = true,
+                BorderBrush = Brush(0x40FFFFFF),
+                BorderThickness = new Thickness(1),
                 Child = window,
                 Effect = new DropShadowEffect { BlurRadius = 30, ShadowDepth = 8, Direction = 270, Opacity = 0.5 },
             };
@@ -612,8 +664,12 @@ internal static class ReadmeMedia
         /// <summary>A file as Explorer shows it in "Large icons": a thumbnail and its name.</summary>
         private static Border Tile(string name) => new()
         {
-            Width = 112, Height = 118, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1),
-            BorderBrush = Brushes.Transparent, Background = Brushes.Transparent,
+            Width = 112,
+            Height = 118,
+            CornerRadius = new CornerRadius(4),
+            BorderThickness = new Thickness(1),
+            BorderBrush = Brushes.Transparent,
+            Background = Brushes.Transparent,
             Child = new StackPanel
             {
                 Margin = new Thickness(0, 8, 0, 0),
@@ -635,41 +691,41 @@ internal static class ReadmeMedia
                 switch (Formats.KindOf(name))
                 {
                     case FileKind.Image:
-                    {
-                        var photo = new Rect(2, 8, 84, 58);
-                        dc.PushClip(new RectangleGeometry(photo, 3, 3));
-                        dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(0x3A, 0x7B, 0xD5), Color.FromRgb(0xFF, 0xA8, 0x5C), 90), null, photo);
-                        dc.DrawEllipse(new SolidColorBrush(Color.FromRgb(0xFF, 0xE2, 0x8A)), null, new Point(58, 36), 9, 9);
-                        dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(0x2D, 0x3E, 0x63)), null, Geometry.Parse("M2,66 L22,40 L36,52 L52,32 L86,60 L86,66 Z"));
-                        dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(0x1C, 0x29, 0x45)), null, Geometry.Parse("M2,66 L2,56 L18,50 L40,58 L62,50 L86,58 L86,66 Z"));
-                        dc.Pop();
-                        break;
-                    }
+                        {
+                            var photo = new Rect(2, 8, 84, 58);
+                            dc.PushClip(new RectangleGeometry(photo, 3, 3));
+                            dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(0x3A, 0x7B, 0xD5), Color.FromRgb(0xFF, 0xA8, 0x5C), 90), null, photo);
+                            dc.DrawEllipse(new SolidColorBrush(Color.FromRgb(0xFF, 0xE2, 0x8A)), null, new Point(58, 36), 9, 9);
+                            dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(0x2D, 0x3E, 0x63)), null, Geometry.Parse("M2,66 L22,40 L36,52 L52,32 L86,60 L86,66 Z"));
+                            dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(0x1C, 0x29, 0x45)), null, Geometry.Parse("M2,66 L2,56 L18,50 L40,58 L62,50 L86,58 L86,66 Z"));
+                            dc.Pop();
+                            break;
+                        }
                     case FileKind.Video:
-                    {
-                        var still = new Rect(2, 10, 84, 52);
-                        dc.PushClip(new RectangleGeometry(still, 3, 3));
-                        dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(0x10, 0x8A, 0x7E), Color.FromRgb(0x14, 0x3D, 0x6E), 30), null, still);
-                        dc.DrawGeometry(new SolidColorBrush(Color.FromArgb(0x80, 0x0B, 0x22, 0x33)), null, Geometry.Parse("M2,62 L30,40 L50,54 L86,34 L86,62 Z"));
-                        dc.Pop();
-                        dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(0xC0, 0x10, 0x10, 0x10)), null, new Point(44, 36), 12, 12);
-                        dc.DrawGeometry(Brushes.White, null, Geometry.Parse("M40,29 L52,36 L40,43 Z"));
-                        break;
-                    }
+                        {
+                            var still = new Rect(2, 10, 84, 52);
+                            dc.PushClip(new RectangleGeometry(still, 3, 3));
+                            dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(0x10, 0x8A, 0x7E), Color.FromRgb(0x14, 0x3D, 0x6E), 30), null, still);
+                            dc.DrawGeometry(new SolidColorBrush(Color.FromArgb(0x80, 0x0B, 0x22, 0x33)), null, Geometry.Parse("M2,62 L30,40 L50,54 L86,34 L86,62 Z"));
+                            dc.Pop();
+                            dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(0xC0, 0x10, 0x10, 0x10)), null, new Point(44, 36), 12, 12);
+                            dc.DrawGeometry(Brushes.White, null, Geometry.Parse("M40,29 L52,36 L40,43 Z"));
+                            break;
+                        }
                     default:
-                    {
-                        bool pdf = name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
-                        var page = new Rect(22, 2, 44, 60);
-                        dc.DrawRoundedRectangle(Brushes.White, new Pen(new SolidColorBrush(Color.FromRgb(0xC8, 0xC8, 0xC8)), 1), page, 2, 2);
-                        for (int line = 0; line < 6; line++)
-                            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0xC9, 0xCF, 0xD8)), null, new Rect(28, 12 + line * 7, line % 3 == 2 ? 20 : 32, 2.5));
-                        var badge = pdf ? Color.FromRgb(0xD9, 0x30, 0x25) : Color.FromRgb(0x3B, 0x82, 0xF6);
-                        dc.DrawRoundedRectangle(new SolidColorBrush(badge), null, new Rect(14, 44, 32, 14), 2, 2);
-                        var label = new FormattedText(Path.GetExtension(name).TrimStart('.').ToUpperInvariant(), System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-                            new Typeface(Ui, FontStyles.Normal, FontWeights.Bold, FontStretches.Normal), 9, Brushes.White, 1.0);
-                        dc.DrawText(label, new Point(30 - label.Width / 2, 45.5));
-                        break;
-                    }
+                        {
+                            bool pdf = name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+                            var page = new Rect(22, 2, 44, 60);
+                            dc.DrawRoundedRectangle(Brushes.White, new Pen(new SolidColorBrush(Color.FromRgb(0xC8, 0xC8, 0xC8)), 1), page, 2, 2);
+                            for (int line = 0; line < 6; line++)
+                                dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0xC9, 0xCF, 0xD8)), null, new Rect(28, 12 + line * 7, line % 3 == 2 ? 20 : 32, 2.5));
+                            var badge = pdf ? Color.FromRgb(0xD9, 0x30, 0x25) : Color.FromRgb(0x3B, 0x82, 0xF6);
+                            dc.DrawRoundedRectangle(new SolidColorBrush(badge), null, new Rect(14, 44, 32, 14), 2, 2);
+                            var label = new FormattedText(Path.GetExtension(name).TrimStart('.').ToUpperInvariant(), System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                                new Typeface(Ui, FontStyles.Normal, FontWeights.Bold, FontStretches.Normal), 9, Brushes.White, 1.0);
+                            dc.DrawText(label, new Point(30 - label.Width / 2, 45.5));
+                            break;
+                        }
                 }
             }
             var bitmap = new RenderTargetBitmap(W * 2, H * 2, 192, 192, PixelFormats.Pbgra32);
@@ -825,16 +881,24 @@ internal static class ReadmeMedia
                 // Below and to the right of the pointer, so the button being dropped on stays in view.
                 var thumb = new Border
                 {
-                    Width = 70, Height = 58, CornerRadius = new CornerRadius(4), Background = Brush(0x5560CDFF),
-                    BorderBrush = Brush(0x9060CDFF), BorderThickness = new Thickness(1),
+                    Width = 70,
+                    Height = 58,
+                    CornerRadius = new CornerRadius(4),
+                    Background = Brush(0x5560CDFF),
+                    BorderBrush = Brush(0x9060CDFF),
+                    BorderThickness = new Thickness(1),
                     Child = new Image { Source = Thumbnail(file), Width = 60, Height = 49 },
                     Opacity = 0.7,
                 };
                 _dropText = new TextBlock { FontFamily = Ui, FontSize = 12, Foreground = Brush(0xFF1A1A1A), VerticalAlignment = VerticalAlignment.Center };
                 _dropLabel = new Border
                 {
-                    Padding = new Thickness(6, 3, 8, 3), Background = Brush(0xFFF0F6FF), BorderBrush = Brush(0xFF6E9FD8), BorderThickness = new Thickness(1),
-                    Child = _dropText, Visibility = Visibility.Hidden,
+                    Padding = new Thickness(6, 3, 8, 3),
+                    Background = Brush(0xFFF0F6FF),
+                    BorderBrush = Brush(0xFF6E9FD8),
+                    BorderThickness = new Thickness(1),
+                    Child = _dropText,
+                    Visibility = Visibility.Hidden,
                 };
                 _ghost = new Canvas();
                 _ghost.Children.Add(thumb);
@@ -890,8 +954,12 @@ internal static class ReadmeMedia
         {
             var ring = new Ellipse
             {
-                Width = 44, Height = 44, Stroke = Brushes.White, StrokeThickness = 2.5,
-                RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(0.3, 0.3),
+                Width = 44,
+                Height = 44,
+                Stroke = Brushes.White,
+                StrokeThickness = 2.5,
+                RenderTransformOrigin = new Point(0.5, 0.5),
+                RenderTransform = new ScaleTransform(0.3, 0.3),
                 Effect = new DropShadowEffect { BlurRadius = 6, ShadowDepth = 0, Opacity = 0.5 },
             };
             Canvas.SetLeft(ring, at.X - 22);
@@ -911,8 +979,12 @@ internal static class ReadmeMedia
             {
                 row.Children.Add(new Border
                 {
-                    Padding = new Thickness(14, 7, 14, 7), Margin = new Thickness(0, 0, 8, 0), CornerRadius = new CornerRadius(8),
-                    Background = Brush(0xEE2A2A30), BorderBrush = Brush(0x55FFFFFF), BorderThickness = new Thickness(1, 1, 1, 3),
+                    Padding = new Thickness(14, 7, 14, 7),
+                    Margin = new Thickness(0, 0, 8, 0),
+                    CornerRadius = new CornerRadius(8),
+                    Background = Brush(0xEE2A2A30),
+                    BorderBrush = Brush(0x55FFFFFF),
+                    BorderThickness = new Thickness(1, 1, 1, 3),
                     Effect = new DropShadowEffect { BlurRadius = 12, ShadowDepth = 3, Opacity = 0.4 },
                     Child = new TextBlock { Text = key, FontFamily = Ui, Foreground = Brushes.White, FontSize = 18, FontWeight = FontWeights.SemiBold },
                 });
@@ -930,8 +1002,12 @@ internal static class ReadmeMedia
         {
             _toast = new Border
             {
-                Width = 360, Padding = new Thickness(16, 12, 16, 16), CornerRadius = new CornerRadius(8),
-                Background = Brush(0xFF262626), BorderBrush = Brush(0x30FFFFFF), BorderThickness = new Thickness(1),
+                Width = 360,
+                Padding = new Thickness(16, 12, 16, 16),
+                CornerRadius = new CornerRadius(8),
+                Background = Brush(0xFF262626),
+                BorderBrush = Brush(0x30FFFFFF),
+                BorderThickness = new Thickness(1),
                 Effect = new DropShadowEffect { BlurRadius = 24, ShadowDepth = 6, Opacity = 0.45 },
                 Child = new StackPanel
                 {
