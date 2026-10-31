@@ -6,12 +6,12 @@ using Circularity.Engine;
 
 namespace Circularity;
 
-internal enum FileKind { Image, Video, Audio, Document, Mixed, Unknown }
+public enum FileKind { Image, Video, Audio, Document, Mixed, Unknown }
 
-internal enum WheelActionKind { Convert, Resize, Crop, Compress, Trim, Combine, Preset, More }
+public enum WheelActionKind { Convert, Resize, Crop, Compress, Trim, Combine, Preset, More }
 
 /// <summary>One button on the wheel. <paramref name="Preset"/> is set for a saved resize or compress.</summary>
-internal sealed record WheelAction(WheelActionKind Kind, string Label, string Glyph, string? Target = null, Preset? Preset = null)
+public sealed record WheelAction(WheelActionKind Kind, string Label, string Glyph, string? Target = null, Preset? Preset = null)
 {
     public bool IsTool => Kind is not (WheelActionKind.Convert or WheelActionKind.More);
 
@@ -28,7 +28,7 @@ internal sealed record WheelAction(WheelActionKind Kind, string Label, string Gl
 }
 
 /// <summary>Icon glyphs from Segoe Fluent Icons (Windows 11) / Segoe MDL2 Assets (Windows 10).</summary>
-internal static class Glyphs
+public static class Glyphs
 {
     public const string Photo = "";
     public const string Video = "";

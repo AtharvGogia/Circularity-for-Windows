@@ -1,0 +1,35 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.34413.148
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Circularity", "Circularity\Circularity.csproj", "{8D94F6C8-3E4C-4E1A-BE5C-7A6E8E4F1A2B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Circularity.UnitTests", "Circularity.UnitTests\Circularity.UnitTests.csproj", "{A1B2C3D4-E5F6-7890-1234-56789ABCDEF0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngineSmokeTest", "EngineSmokeTest\EngineSmokeTest.csproj", "{F0E1D2C3-B4A5-9678-4321-0FEDCBA98765}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8D94F6C8-3E4C-4E1A-BE5C-7A6E8E4F1A2B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8D94F6C8-3E4C-4E1A-BE5C-7A6E8E4F1A2B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8D94F6C8-3E4C-4E1A-BE5C-7A6E8E4F1A2B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8D94F6C8-3E4C-4E1A-BE5C-7A6E8E4F1A2B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1B2C3D4-E5F6-7890-1234-56789ABCDEF0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-1234-56789ABCDEF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-1234-56789ABCDEF0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-E5F6-7890-1234-56789ABCDEF0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F0E1D2C3-B4A5-9678-4321-0FEDCBA98765}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F0E1D2C3-B4A5-9678-4321-0FEDCBA98765}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F0E1D2C3-B4A5-9678-4321-0FEDCBA98765}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F0E1D2C3-B4A5-9678-4321-0FEDCBA98765}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+	EndGlobalSection
+EndGlobal

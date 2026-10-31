@@ -5,7 +5,7 @@ using System.Windows.Media;
 namespace Circularity.Engine;
 
 /// <summary>What to do to a file: convert, resize, crop, compress, trim or combine it.</summary>
-internal abstract record Operation
+public abstract record Operation
 {
     /// <summary>Added to the output file name, e.g. "photo (resized).jpg". Null for plain conversions.</summary>
     public abstract string? NameSuffix { get; }
@@ -14,19 +14,19 @@ internal abstract record Operation
     public abstract string Describe();
 }
 
-internal sealed record ConvertTo(string Target) : Operation
+public sealed record ConvertTo(string Target) : Operation
 {
     public override string? NameSuffix => null;
     public override string Describe() => Target.ToUpperInvariant();
 }
 
-internal sealed record ResizeTo(ResizeSpec Spec) : Operation
+public sealed record ResizeTo(ResizeSpec Spec) : Operation
 {
     public override string? NameSuffix => "resized";
     public override string Describe() => "Resize";
 }
 
-internal sealed record CropTo(PixelRect Rect) : Operation
+public sealed record CropTo(PixelRect Rect) : Operation
 {
     public override string? NameSuffix => "cropped";
     public override string Describe() => "Crop";
@@ -36,13 +36,13 @@ internal sealed record CropTo(PixelRect Rect) : Operation
 /// Puts several images and/or PDFs, in order, into one PDF. Queued as a single job on the first file,
 /// so the result is named after it ("scan (combined).pdf").
 /// </summary>
-internal sealed record CombineIntoPdf(IReadOnlyList<string> Files) : Operation
+public sealed record CombineIntoPdf(IReadOnlyList<string> Files) : Operation
 {
     public override string? NameSuffix => "combined";
     public override string Describe() => "Combine";
 }
 
-internal sealed record CompressTo(CompressSpec Spec) : Operation
+public sealed record CompressTo(CompressSpec Spec) : Operation
 {
     public override string? NameSuffix => "compressed";
     public override string Describe() => "Compress";
@@ -53,20 +53,20 @@ internal sealed record CompressTo(CompressSpec Spec) : Operation
 /// is the JPEG quality; for videos and PDFs it picks how hard to squeeze (see the dialogs). Videos can
 /// also be scaled down to at most <paramref name="MaxHeight"/> pixels tall.
 /// </summary>
-internal sealed record CompressSpec(int? Quality = null, long? MaxBytes = null, int? MaxHeight = null);
+public sealed record CompressSpec(int? Quality = null, long? MaxBytes = null, int? MaxHeight = null);
 
 /// <summary>Keeps the part of a video or audio file between two times.</summary>
 /// <param name="Exact">
 /// Re-encode, so the cut lands exactly on the chosen times. Otherwise the streams are copied as they
 /// are: instant and lossless, but a video can only start on a keyframe, so it may begin a little early.
 /// </param>
-internal sealed record TrimTo(TimeSpan Start, TimeSpan End, bool Exact) : Operation
+public sealed record TrimTo(TimeSpan Start, TimeSpan End, bool Exact) : Operation
 {
     public override string? NameSuffix => "trimmed";
     public override string Describe() => "Trim";
 }
 
-internal enum ResizeKind
+public enum ResizeKind
 {
     /// <summary>Largest size that fits inside Width × Height, keeping the aspect ratio.</summary>
     Fit,
@@ -79,7 +79,7 @@ internal enum ResizeKind
 }
 
 /// <summary>Background fill mode for FitWithBackground.</summary>
-internal enum ResizeBackgroundKind
+public enum ResizeBackgroundKind
 {
     /// <summary>Solid color fill.</summary>
     Color,
@@ -92,7 +92,7 @@ internal enum ResizeBackgroundKind
 }
 
 /// <summary>Gradient direction for background (legacy, kept for compatibility).</summary>
-internal enum GradientDirection
+public enum GradientDirection
 {
     Horizontal,
     Vertical,
@@ -101,7 +101,7 @@ internal enum GradientDirection
 }
 
 /// <summary>Describes how to fill the canvas background when the resized image doesn't fill it.</summary>
-internal sealed record ResizeBackground(
+public sealed record ResizeBackground(
     ResizeBackgroundKind Kind = ResizeBackgroundKind.Color,
     Color? Color = null,
     Color? GradientStart = null,
@@ -120,7 +120,7 @@ internal sealed record ResizeBackground(
         new(ResizeBackgroundKind.BlurredSource, BlurRadius: radius, Scale: scale);
 }
 
-internal sealed record ResizeSpec(ResizeKind Kind, int Width, int Height, ResizeBackground? Background = null, double ImageScale = 1.0)
+public sealed record ResizeSpec(ResizeKind Kind, int Width, int Height, ResizeBackground? Background = null, double ImageScale = 1.0)
 {
     /// <summary>The new size for a source of the given size.</summary>
     public (int Width, int Height) Apply(int width, int height)
@@ -144,4 +144,15 @@ internal sealed record ResizeSpec(ResizeKind Kind, int Width, int Height, Resize
 }
 
 /// <summary>A rectangle in source pixels (after any EXIF or video rotation has been applied).</summary>
-internal readonly record struct PixelRect(int X, int Y, int Width, int Height);
+public readonly record struct PixelRect(int X, int Y, int Width, int Height)
+{
+    /// <summary>Clamps the rectangle to fit within the given image dimensions.</summary>
+    public PixelRect Clamp(int imageWidth, int imageHeight)
+    {
+        int x = Math.Clamp(X, 0, imageWidth - 1);
+        int y = Math.Clamp(Y, 0, imageHeight - 1);
+        int w = Math.Clamp(Width, 1, imageWidth - x);
+        int h = Math.Clamp(Height, 1, imageHeight - y);
+        return new PixelRect(x, y, w, h);
+    }
+}
