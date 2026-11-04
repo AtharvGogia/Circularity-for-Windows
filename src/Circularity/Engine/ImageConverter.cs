@@ -247,70 +247,47 @@ internal sealed class ImageConverter : IConverter
         }
     }
 
-    /// <summary>Creates a blurred, scaled version of the source image to fill the canvas.</summary>
-    private static BitmapSource CreateBlurredBackground(BitmapSource source, int canvasWidth, int canvasHeight, double blurRadius, double scale)
+    /// <summary>
+    /// The source scaled to cover the canvas (zoomed in by <paramref name="zoom"/>, centred, edges cropped),
+    /// then blurred. <paramref name="blurRadius"/> is in pixels of a 1000-pixel canvas, so a saved preset
+    /// looks the same at any size.
+    /// </summary>
+    private static BitmapSource CreateBlurredBackground(BitmapSource source, int canvasWidth, int canvasHeight, double blurRadius, double zoom)
     {
-        // First, scale the source to fill the canvas (cover mode)
-        double scaleX = (double)canvasWidth / source.PixelWidth;
-        double scaleY = (double)canvasHeight / source.PixelHeight;
-        double coverScale = Math.Max(scaleX, scaleY) * scale;
+        double radius = Math.Max(0, blurRadius) * Math.Max(canvasWidth, canvasHeight) / 1000.0;
 
-        int blurWidth = Math.Max(1, (int)Math.Round(source.PixelWidth * coverScale));
-        int blurHeight = Math.Max(1, (int)Math.Round(source.PixelHeight * coverScale));
+        // Blur a smaller copy: a blurred picture has no fine detail to lose, and WPF's blur gets slow at big
+        // radii. Drawing it back at full size (high-quality scaling) stays smooth.
+        double shrink = Math.Clamp(radius / 8, 1, 16);
+        int width = Math.Max(1, (int)Math.Ceiling(canvasWidth / shrink));
+        int height = Math.Max(1, (int)Math.Ceiling(canvasHeight / shrink));
+        double smallRadius = radius / shrink;
 
-        // Render scaled source
-        var visual = new DrawingVisual();
-        RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.HighQuality);
-        using (var dc = visual.RenderOpen())
-        {
-            dc.DrawImage(source, new Rect(0, 0, blurWidth, blurHeight));
-        }
-        var scaled = new RenderTargetBitmap(blurWidth, blurHeight, 96, 96, PixelFormats.Pbgra32);
-        scaled.Render(visual);
+        // The picture runs past the edges by the blur radius, then that margin is cut off, so the blur doesn't
+        // fade to transparent at the sides.
+        int pad = (int)Math.Ceiling(smallRadius);
+        int paddedWidth = width + 2 * pad, paddedHeight = height + 2 * pad;
+        double cover = Math.Max((double)paddedWidth / source.PixelWidth, (double)paddedHeight / source.PixelHeight) * Math.Max(1, zoom);
+        double drawWidth = source.PixelWidth * cover, drawHeight = source.PixelHeight * cover;
 
-        // Apply blur using downsample/upsample with ping-pong buffers
-        // Downsample to 1/4 size (creates initial blur)
-        int smallW = Math.Max(1, blurWidth / 4);
-        int smallH = Math.Max(1, blurHeight / 4);
-
-        var smallVisual = new DrawingVisual();
-        using (var dc = smallVisual.RenderOpen())
-        {
-            dc.DrawImage(scaled, new Rect(0, 0, smallW, smallH));
-        }
-        var small = new RenderTargetBitmap(smallW, smallH, 96, 96, PixelFormats.Pbgra32);
-        small.Render(smallVisual);
-
-        // Ping-pong buffers for blur passes
-        var current = new RenderTargetBitmap(canvasWidth, canvasHeight, 96, 96, PixelFormats.Pbgra32);
-        var next = new RenderTargetBitmap(canvasWidth, canvasHeight, 96, 96, PixelFormats.Pbgra32);
-
-        // Initial upsample with bilinear (creates blur)
-        var blurVisual = new DrawingVisual();
-        RenderOptions.SetBitmapScalingMode(blurVisual, BitmapScalingMode.Linear);
-        using (var dc = blurVisual.RenderOpen())
-        {
-            dc.DrawImage(small, new Rect(0, 0, canvasWidth, canvasHeight));
-        }
-        current.Render(blurVisual);
-
-        // Additional blur passes (each roughly doubles the blur radius)
-        int passes = Math.Max(1, (int)Math.Round(blurRadius / 25.0));
-        for (int i = 1; i < passes; i++)
-        {
-            var passVisual = new DrawingVisual();
-            RenderOptions.SetBitmapScalingMode(passVisual, BitmapScalingMode.Linear);
-            using (var dc = passVisual.RenderOpen())
+        var picture = new DrawingVisual();
+        RenderOptions.SetBitmapScalingMode(picture, BitmapScalingMode.HighQuality);
+        using (var dc = picture.RenderOpen())
+            dc.DrawImage(source, new Rect((paddedWidth - drawWidth) / 2, (paddedHeight - drawHeight) / 2, drawWidth, drawHeight));
+        if (smallRadius >= 0.5)
+            picture.Effect = new System.Windows.Media.Effects.BlurEffect
             {
-                dc.DrawImage(current, new Rect(0, 0, canvasWidth, canvasHeight));
-            }
-            next.Render(passVisual);
+                Radius = smallRadius,
+                KernelType = System.Windows.Media.Effects.KernelType.Gaussian,
+                RenderingBias = System.Windows.Media.Effects.RenderingBias.Quality,
+            };
 
-            // Swap buffers
-            (current, next) = (next, current);
-        }
-
-        return current;
+        // An effect only applies below the visual that's rendered, so the picture goes inside a container.
+        var root = new ContainerVisual();
+        root.Children.Add(picture);
+        var target = new RenderTargetBitmap(paddedWidth, paddedHeight, 96, 96, PixelFormats.Pbgra32);
+        target.Render(root);
+        return new CroppedBitmap(target, new Int32Rect(pad, pad, width, height));
     }
 
     private static BitmapSource Resize(BitmapSource image, (int Width, int Height) size)

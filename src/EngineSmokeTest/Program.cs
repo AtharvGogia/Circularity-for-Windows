@@ -124,8 +124,9 @@ internal static class Program
             await SvgChecks(queue, dir);
             await OutputFolderChecks(queue, dir, image);
             await HeicAvifOutputChecks(queue, ffmpeg, dir, photo);
+            await ResizeBackgroundChecks(queue, dir);
 
-            // The default colour moved from orange to violet in 0.5.2: settings still on the old default
+            // The default colour moved from orange to violet in 0.5.1: settings still on the old default
             // move with it, but an orange someone picked (or any other colour) stays.
             Check("settings left on the old orange default become violet",
                 Settings.FromJson("{\"AccentColor\":\"#FF8A1E\"}").AccentColor == Settings.DefaultAccent, Settings.FromJson("{\"AccentColor\":\"#FF8A1E\"}").AccentColor);
@@ -549,6 +550,81 @@ internal static class Program
         Check("audio gets Trim", Tools("a.mp3") == "Trim", Tools("a.mp3"));
         Check("PDFs get Compress, Word files don't", Tools("a.pdf") == "Compress" && !Tools("a.docx").Contains("Compress"), $"pdf: {Tools("a.pdf")}; docx: {Tools("a.docx")}");
         Check("a mix of photos and videos gets neither", !Tools("a.jpg", "b.mp4").Contains("Compress") && !Tools("a.jpg", "b.mp4").Contains("Trim"), Tools("a.jpg", "b.mp4"));
+    }
+
+    /// <summary>
+    /// "Fit with background": the canvas is the chosen size, and the background fills what the picture
+    /// doesn't: a solid colour, a gradient, or the picture itself blurred (really blurred, covering the
+    /// canvas without stretching, and opaque right to the edges).
+    /// </summary>
+    private static async Task ResizeBackgroundChecks(ConversionQueue queue, string dir)
+    {
+        // 400 × 100 of 2-pixel black and white stripes: as sharp as a picture gets.
+        string stripes = Path.Combine(dir, "stripes.png");
+        var visual = new System.Windows.Media.DrawingVisual();
+        using (var dc = visual.RenderOpen())
+            for (int i = 0; i < 200; i++)
+                dc.DrawRectangle(i % 2 == 0 ? System.Windows.Media.Brushes.White : System.Windows.Media.Brushes.Black, null, new System.Windows.Rect(i * 2, 0, 2, 100));
+        var drawn = new System.Windows.Media.Imaging.RenderTargetBitmap(400, 100, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        drawn.Render(visual);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(drawn));
+        using (var file = File.Create(stripes))
+            encoder.Save(file);
+
+        // One row of pixels (BGRA) from an output, or null if the job failed.
+        async Task<(string Detail, byte[]? Row)> RowOf(ResizeBackground background, int y)
+        {
+            var job = (await Run(queue, new[] { stripes }, new ResizeTo(new ResizeSpec(ResizeKind.FitWithBackground, 400, 400, background)))).Jobs[0];
+            if (job.State != JobState.Succeeded)
+                return ($"{job.State}: {job.Error}", null);
+            var image = new System.Windows.Media.Imaging.FormatConvertedBitmap(ImageConverter.LoadOriented(job.OutputPath!), System.Windows.Media.PixelFormats.Bgra32, null, 0);
+            if ((image.PixelWidth, image.PixelHeight) != (400, 400))
+                return ($"{image.PixelWidth}x{image.PixelHeight}", null);
+            var row = new byte[400 * 4];
+            image.CopyPixels(new System.Windows.Int32Rect(0, y, 400, 1), row, row.Length, 0);
+            return ("400x400", row);
+        }
+        // How far apart the darkest and lightest pixels of a row are (green channel), and whether all are opaque.
+        static (int Contrast, bool Opaque) Measure(byte[] row)
+        {
+            int min = 255, max = 0;
+            bool opaque = true;
+            for (int i = 0; i < row.Length; i += 4)
+            {
+                min = Math.Min(min, row[i + 1]);
+                max = Math.Max(max, row[i + 1]);
+                opaque &= row[i + 3] == 255;
+            }
+            return (max - min, opaque);
+        }
+
+        // The picture fits as 400 × 100 in the middle; row 20 is background, row 200 is the picture.
+        var solid = await RowOf(ResizeBackground.Solid(System.Windows.Media.Color.FromRgb(0x8B, 0x5C, 0xF6)), 20);
+        Check("fit with background: solid colour fills the canvas",
+            solid.Row is { } s && s[0] == 0xF6 && s[1] == 0x5C && s[2] == 0x8B && s[1599 - 1] == 0x8B, solid.Detail);
+
+        var gradient = await RowOf(ResizeBackground.Gradient(System.Windows.Media.Colors.Black, System.Windows.Media.Colors.White), 20);
+        Check("fit with background: gradient runs from start to end",
+            gradient.Row is { } g && g[1] < 20 && g[1597] > 235, gradient.Detail + (gradient.Row is { } gr ? $", {gr[1]} to {gr[1597]}" : ""));
+
+        var picture = await RowOf(ResizeBackground.Blurred(100), 200);
+        Check("fit with background: the picture itself stays sharp",
+            picture.Row is { } p && Measure(p).Contrast > 240, picture.Detail);
+
+        var light = await RowOf(ResizeBackground.Blurred(5), 20);
+        var heavy = await RowOf(ResizeBackground.Blurred(100), 20);
+        var heavyEdge = await RowOf(ResizeBackground.Blurred(100), 0);
+        if (light.Row is { } l && heavy.Row is { } h && heavyEdge.Row is { } e)
+        {
+            var (lightContrast, _) = Measure(l);
+            var (heavyContrast, heavyOpaque) = Measure(h);
+            Check("fit with background: a strong blur smooths the stripes away", heavyContrast < 40, $"contrast {heavyContrast} of 255");
+            Check("fit with background: more blur is blurrier", lightContrast > heavyContrast + 60, $"contrast {lightContrast} at 5, {heavyContrast} at 100");
+            Check("fit with background: the blur is opaque to the edges", heavyOpaque && Measure(e).Opaque, "rows 0 and 20");
+        }
+        else
+            Check("fit with background: blurred background", false, $"{light.Detail}; {heavy.Detail}; {heavyEdge.Detail}");
     }
 
     /// <summary>

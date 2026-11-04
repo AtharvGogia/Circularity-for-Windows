@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Windows.Media;
 using Circularity.Engine;
 
@@ -16,7 +17,7 @@ internal sealed class Settings
 
     public const int MinWheelSize = 200;
     public const int MaxWheelSize = 360;
-    /// <summary>Circularity's own colour: violet since 0.5.2, orange before.</summary>
+    /// <summary>Circularity's own colour: violet since 0.5.1, orange before.</summary>
     public const string DefaultAccent = "#8B5CF6";
 
     /// <summary>The default up to 0.5.0, which settings from then still hold when it was never changed.</summary>
@@ -129,7 +130,17 @@ internal sealed class Settings
     }
 
     /// <summary>Settings as saved, brought up to date (also used by the tests).</summary>
-    internal static Settings FromJson(string json) => JsonSerializer.Deserialize<Settings>(json, JsonOptions)?.Migrate() ?? new Settings();
+    internal static Settings FromJson(string json)
+    {
+        var settings = JsonSerializer.Deserialize<Settings>(json, JsonOptions);
+        if (settings == null)
+            return new Settings();
+        // Files from before versioning have no "Version" at all: they're version 1, not the current one
+        // the property starts out as.
+        if (JsonNode.Parse(json)?["Version"] is null)
+            settings.Version = 1;
+        return settings.Migrate();
+    }
 
     public void Save()
     {
@@ -174,7 +185,7 @@ internal sealed class Settings
 /// <summary>A saved resize or compress (exactly one of the two), shown on the wheel under its name.</summary>
 /// <param name="Kind">For a compress, the kind of file it was saved from ("Image", "Video", "Document"), since
 /// "80%" or "under 5 MB" mean different things for each. Older presets have none, and were for images.</param>
-public sealed record Preset(string Id, string Name, ResizeSpec? Resize = null, CompressSpec? Compress = null, string? Kind = null)
+internal sealed record Preset(string Id, string Name, ResizeSpec? Resize = null, CompressSpec? Compress = null, string? Kind = null)
 {
     public const int MaxNameLength = 14;
 

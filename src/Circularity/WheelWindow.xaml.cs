@@ -413,7 +413,8 @@ internal partial class WheelWindow : Window
         // "More" is a live button too, so it doesn't get the no-entry cursor. Neither does the centre
         // when Windows is drawing the drag: there the label says "Cancel" instead, which Windows only
         // shows for an accepted drop. The drop itself still reports nothing done (see OnDrop).
-        bool labelled = DropFeedback.IsShownFor(e.Data); e.Effects = index >= 0 || index == WheelView.MoreIndex || (index == WheelView.CenterIndex && labelled)
+        bool labelled = DropFeedback.IsShownFor(e.Data);
+        e.Effects = index >= 0 || index == WheelView.MoreIndex || (index == WheelView.CenterIndex && labelled)
             ? DragDropEffects.Copy
             : DragDropEffects.None;
         e.Handled = true;

@@ -51,7 +51,6 @@ internal partial class ResizeDialog : Window
         WidthBox.TextChanged += (_, _) => SyncAspect(fromWidth: true);
         HeightBox.TextChanged += (_, _) => SyncAspect(fromWidth: false);
         KeepAspect.Click += (_, _) => Update();
-        ModeBox.SelectionChanged += (_, _) => UpdateModeUI();
 
         Loaded += (_, _) =>
         {
@@ -85,14 +84,14 @@ internal partial class ResizeDialog : Window
             return;
 
         bool isFitWithBackground = GetMode() == ResizeKind.FitWithBackground;
-        bool isFitOrFitBackground = GetMode() != ResizeKind.Stretch;
 
         BackgroundPanel.Visibility = isFitWithBackground ? Visibility.Visible : Visibility.Collapsed;
         ScalePanel.Visibility = isFitWithBackground ? Visibility.Visible : Visibility.Collapsed;
         KeepAspect.Visibility = Visibility.Collapsed; // Now handled by mode selection
 
-        // Sync aspect ratio only for Fit and FitWithBackground modes
-        KeepAspect.IsChecked = isFitOrFitBackground;
+        // Only "Fit inside" keeps width and height in step: with a background, the canvas is meant to be a
+        // different shape from the picture (that's where the background shows).
+        KeepAspect.IsChecked = GetMode() == ResizeKind.Fit;
 
         UpdateBackgroundKindUI();
     }
@@ -195,6 +194,13 @@ internal partial class ResizeDialog : Window
         Update();
     }
 
+    private void BlurZoom_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (BlurZoomValueText != null)
+            BlurZoomValueText.Text = $"{e.NewValue:P0}";
+        Update();
+    }
+
     private void Scale_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (ScaleValueText != null)
@@ -256,19 +262,14 @@ internal partial class ResizeDialog : Window
             {
                 ResizeBackgroundKind.Color => ResizeBackground.Solid(ColorPicker.Color),
                 ResizeBackgroundKind.Gradient => ResizeBackground.Gradient(GradientStartPicker.Color, GradientEndPicker.Color, GradientAngleSlider?.Value ?? 0),
-                ResizeBackgroundKind.BlurredSource => ResizeBackground.Blurred(BlurSlider.Value, ScaleSlider.Value),
+                ResizeBackgroundKind.BlurredSource => ResizeBackground.Blurred(BlurSlider.Value, BlurZoomSlider.Value),
                 _ => ResizeBackground.Solid(Colors.White)
             };
             return new ResizeSpec(mode, w, h, bg, ScaleSlider.Value);
         }
 
-        if (mode == ResizeKind.Fit)
-        {
-            return new ResizeSpec(mode, w, h, null, ScaleSlider.Value);
-        }
-
-        // Stretch
-        return new ResizeSpec(mode, w, h, null, 1.0);
+        // Fit and Stretch: the picture is the whole result, so there's nothing to scale it within.
+        return new ResizeSpec(mode, w, h);
     }
 
     private static bool TryInt(string text, out int value) =>

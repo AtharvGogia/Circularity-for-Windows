@@ -766,7 +766,8 @@ internal sealed class WheelView : Canvas
         SetTop(content, at.Y - content.DesiredSize.Height / 2);
 
         var text = new SolidColorBrush(_palette.Text);
-        var group = new Canvas { RenderTransform = new TranslateTransform(), Children = { body, glow, content } }; TextElement.SetForeground(group, text);
+        var group = new Canvas { RenderTransform = new TranslateTransform(), Children = { body, glow, content } };
+        TextElement.SetForeground(group, text);
         host.Children.Add(group);
         _buttons.Add(new WheelButton(target, group, body, glow, text, midAngle, at));
     }

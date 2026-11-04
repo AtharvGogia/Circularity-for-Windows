@@ -6,12 +6,13 @@ using Circularity.Engine;
 
 namespace Circularity;
 
+// Public only because the unit tests take it as a theory parameter.
 public enum FileKind { Image, Video, Audio, Document, Mixed, Unknown }
 
-public enum WheelActionKind { Convert, Resize, Crop, Compress, Trim, Combine, Preset, More }
+internal enum WheelActionKind { Convert, Resize, Crop, Compress, Trim, Combine, Preset, More }
 
 /// <summary>One button on the wheel. <paramref name="Preset"/> is set for a saved resize or compress.</summary>
-public sealed record WheelAction(WheelActionKind Kind, string Label, string Glyph, string? Target = null, Preset? Preset = null)
+internal sealed record WheelAction(WheelActionKind Kind, string Label, string Glyph, string? Target = null, Preset? Preset = null)
 {
     public bool IsTool => Kind is not (WheelActionKind.Convert or WheelActionKind.More);
 
@@ -28,7 +29,7 @@ public sealed record WheelAction(WheelActionKind Kind, string Label, string Glyp
 }
 
 /// <summary>Icon glyphs from Segoe Fluent Icons (Windows 11) / Segoe MDL2 Assets (Windows 10).</summary>
-public static class Glyphs
+internal static class Glyphs
 {
     public const string Photo = "";
     public const string Video = "";

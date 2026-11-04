@@ -133,10 +133,15 @@
                     <Slider x:Name="BlurSlider" Minimum="1" Maximum="200" Value="50" TickFrequency="10" IsSnapToTickEnabled="True" Width="200" ValueChanged="Blur_ValueChanged" />
                     <TextBlock x:Name="BlurValueText" Text="50" Opacity="0.8" VerticalAlignment="Center" Margin="8,0,0,0" Width="40" TextAlignment="Right" />
                 </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <TextBlock Text="Zoom" Opacity="0.8" VerticalAlignment="Center" Margin="0,0,8,0" Width="90" />
+                    <Slider x:Name="BlurZoomSlider" Minimum="1" Maximum="3" Value="1" TickFrequency="0.1" IsSnapToTickEnabled="True" Width="200" ValueChanged="BlurZoom_ValueChanged" />
+                    <TextBlock x:Name="BlurZoomValueText" Text="100%" Opacity="0.8" VerticalAlignment="Center" Margin="8,0,0,0" Width="50" TextAlignment="Right" />
+                </StackPanel>
             </StackPanel>
         </StackPanel>
 
-        <!-- Image scale within canvas (for Fit and FitWithBackground) -->
+        <!-- Image scale within the canvas (Fit with background only) -->
         <StackPanel x:Name="ScalePanel" Margin="0,12,0,0" Visibility="Collapsed">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="Image scale" Opacity="0.8" VerticalAlignment="Center" Margin="0,0,8,0" Width="90" />
