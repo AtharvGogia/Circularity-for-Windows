@@ -17,6 +17,7 @@ count a day; see [Privacy](#privacy).)
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/AtharvGogia/Circularity-for-Windows?include_prereleases&label=Latest%20Release)](https://github.com/AtharvGogia/Circularity-for-Windows/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/AtharvGogia/Circularity-for-Windows/total?label=Total%20Downloads)](https://github.com/AtharvGogia/Circularity-for-Windows/releases)
+[![Daily Users (opt-in)](https://img.shields.io/endpoint?url=https%3A%2F%2Fcircularity-usage.gogiaatharv.workers.dev%2Fbadge&label=Daily%20Users%20(opt-in))](#privacy)
 
 Made by **Atharv Gogia**. Open source under the [MIT licence](LICENSE). It's a one-person side
 project, so if something breaks or you have an idea, I'd really like to hear about it.
