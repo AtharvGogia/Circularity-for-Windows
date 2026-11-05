@@ -381,18 +381,14 @@ smooth out over time.
 
 ## Publishing a release
 
-Releases are built by GitHub Actions from the source at the tag, so every installer matches its
-code:
+Releases are built and published by hand. CI only builds and tests each push.
 
 1. Set `<Version>` in `src/Circularity/Circularity.csproj` to `x.y.z`.
 2. Write the release notes in `docs/releases/x.y.z.md`, ending with a "For developers" section.
-3. Commit, then push a tag: `git tag vx.y.z && git push origin vx.y.z`.
-
-The `installer` job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the tests,
-builds FFmpeg (cached until its build script changes) and the installer with `build\build.ps1`,
-and publishes the release with `CircularitySetup-x.y.z.exe` attached. It refuses a tag that doesn't
-match `<Version>`, or one without notes. To build the installer without releasing it, run the
-workflow by hand from the Actions tab; the installer is attached to the run.
+3. Commit and push, then build the installer with `build\build.ps1`
+   (`artifacts\CircularitySetup-x.y.z.exe`).
+4. Publish it, tagged `vx.y.z`:
+   `gh release create vx.y.z artifacts\CircularitySetup-x.y.z.exe --title "Circularity x.y.z" --notes-file docs/releases/x.y.z.md --target <full commit SHA>`
 
 Whatever is written in the release's description is shown in the update window as "what's new".
 The repository has to be public for the updater to see releases.
