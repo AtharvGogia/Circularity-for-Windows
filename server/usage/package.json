@@ -1,0 +1,21 @@
+{
+	"name": "circularity-usage",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "cf dev",
+		"build": "cf build",
+		"deploy": "cf deploy",
+		"typecheck": "cf workers types && tsc"
+	},
+	"devDependencies": {
+		"@cloudflare/vite-plugin": "beta",
+		"cf": "^1.0.0-beta.27",
+		"typescript": "^7.0.2",
+		"vite": "^8.3.0"
+	},
+	"allowScripts": {
+		"workerd@1.20261101.1": true,
+		"workerd@1.20261103.1": true
+	}
+}

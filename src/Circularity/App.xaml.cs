@@ -57,6 +57,13 @@ public partial class App : Application
     private (bool Enabled, int Hours)? _updateSchedule;
     private bool _checkingForUpdates;
 
+    // The anonymous daily count: one attempt shortly after start, then every few hours until one goes
+    // through (it's sent at most once a day, whenever the date has changed).
+    private System.Windows.Threading.DispatcherTimer? _firstUsagePing;
+    private System.Windows.Threading.DispatcherTimer? _usagePingTimer;
+    private bool _pingingUsage;
+    private bool? _usageTimersOn;
+
     // Explorer launches one copy per selected file for "Convert with Circularity", each handing its
     // file over separately, so files arriving close together are gathered into one wheel.
     private readonly List<string> _incomingFiles = new();
@@ -147,6 +154,7 @@ public partial class App : Application
         _tray = CreateTray();
         ApplySettings(_settings);
         StartAutoUpdateCheck();
+        StartUsagePing();
 
         _hook = new GestureHook { ShouldArm = ShouldArm };
         _hook.Triggered += (x, y, _) => Dispatcher.BeginInvoke(() =>
@@ -232,7 +240,13 @@ public partial class App : Application
         _welcomeWindow.TutorialRequested += OpenTutorial;
         _welcomeWindow.Closed += (_, _) =>
         {
+            bool share = _welcomeWindow.ShareUsageCount;
             _welcomeWindow = null;
+            _settings.SetShareUsageCount(share);
+            _settings.Save();
+            // The first attempt waited for this window to close, so it starts afresh.
+            _usageTimersOn = null;
+            StartUsagePing();
             ScheduleMemoryRelease();
         };
         _welcomeWindow.Show();
@@ -457,6 +471,64 @@ public partial class App : Application
                 await CheckForUpdatesSilentAsync();
             };
             _firstUpdateCheck.Start();
+        }
+    }
+
+    /// <summary>(Re)starts the anonymous daily count's timers when it's turned on or off.</summary>
+    private void StartUsagePing()
+    {
+        if (_usageTimersOn == _settings.ShareUsageCount)
+            return;
+        _usageTimersOn = _settings.ShareUsageCount;
+
+        _firstUsagePing?.Stop();
+        _firstUsagePing = null;
+        _usagePingTimer?.Stop();
+        _usagePingTimer = null;
+        if (!_settings.ShareUsageCount)
+            return;
+
+        _usagePingTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromHours(6) };
+        _usagePingTimer.Tick += async (_, _) => await PingUsageAsync();
+        _usagePingTimer.Start();
+
+        _firstUsagePing = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(2) };
+        _firstUsagePing.Tick += async (_, _) =>
+        {
+            _firstUsagePing?.Stop();
+            await PingUsageAsync();
+        };
+        _firstUsagePing.Start();
+    }
+
+    /// <summary>Sends the anonymous count if it hasn't gone today. Never throws: it runs from a timer.</summary>
+    private async Task PingUsageAsync()
+    {
+        // Not while the welcome window is open: its checkbox may still be about to be unticked.
+        if (_pingingUsage || _welcomeWindow != null)
+            return;
+        _pingingUsage = true;
+        try
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            if (!_settings.ShareUsageCount || _settings.UsageId is not { } id || !UsagePing.IsDue(_settings.LastUsagePing, today))
+                return;
+            if (!await new UsagePing().SendAsync(id))
+                return;
+            // Settings may have been changed (or the count turned off) while it was being sent.
+            if (_settings.ShareUsageCount && _settings.UsageId == id)
+            {
+                _settings.LastUsagePing = UsagePing.FormatDate(today);
+                _settings.Save();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"Usage count failed: {ex.Message}");
+        }
+        finally
+        {
+            _pingingUsage = false;
         }
     }
 
@@ -805,9 +877,15 @@ public partial class App : Application
         {
             // Kept by the app, not shown in Settings, so the window's copy may be out of date.
             settings.LastNotifiedUpdate = _settings.LastNotifiedUpdate;
+            if (settings.ShareUsageCount && _settings.ShareUsageCount)
+            {
+                settings.UsageId = _settings.UsageId;
+                settings.LastUsagePing = _settings.LastUsagePing;
+            }
             ApplySettings(settings);
             settings.Save();
             StartAutoUpdateCheck();
+            StartUsagePing();
         };
         _settingsWindow.CheckForUpdatesRequested += OpenUpdates;
         _settingsWindow.TutorialRequested += OpenTutorial;

@@ -8,7 +8,7 @@ namespace Circularity.UnitTests;
 public class SettingsMigrationTests
 {
     [Fact]
-    public void Migrate_Version1To2_SetsVersionTo2()
+    public void Migrate_Version1_MovesToCurrentVersion()
     {
         // Simulate loading v1 settings (no Version field = defaults to 1)
         var v1Json = """
@@ -121,5 +121,52 @@ public class SettingsMigrationTests
             if (File.Exists(tempPath))
                 File.Delete(tempPath);
         }
+    }
+
+    [Fact]
+    public void OlderFiles_KeepTheirChoices_AndTheCountStaysOff()
+    {
+        var settings = Settings.FromJson("""{"Version": 2, "AutoCheckForUpdates": false}""");
+
+        Assert.False(settings.AutoCheckForUpdates);
+        Assert.False(settings.ShareUsageCount);
+        Assert.Null(settings.UsageId);
+    }
+
+    [Fact]
+    public void ChoicesToTurnThingsOff_AreKept()
+    {
+        var settings = Settings.FromJson("""{"Version": 2, "AutoCheckForUpdates": false, "ShareUsageCount": false, "UsageId": "old", "LastUsagePing": "2026-01-01"}""");
+
+        Assert.False(settings.AutoCheckForUpdates);
+        Assert.False(settings.ShareUsageCount);
+        Assert.Null(settings.UsageId);
+        Assert.Null(settings.LastUsagePing);
+    }
+
+    [Fact]
+    public void FreshSettings_CheckForUpdates_ButDontCount()
+    {
+        var settings = Settings.FromJson("{}");
+
+        Assert.True(settings.AutoCheckForUpdates);
+        Assert.False(settings.ShareUsageCount);
+        Assert.Null(settings.UsageId);
+    }
+
+    [Fact]
+    public void SetShareUsageCount_OffClearsTheIdAndOnMakesANewOne()
+    {
+        var settings = Settings.FromJson("{}");
+        settings.SetShareUsageCount(true);
+        string first = settings.UsageId!;
+        Assert.False(string.IsNullOrEmpty(first));
+
+        settings.SetShareUsageCount(false);
+        Assert.Null(settings.UsageId);
+        settings.SetShareUsageCount(true);
+
+        Assert.False(string.IsNullOrEmpty(settings.UsageId));
+        Assert.NotEqual(first, settings.UsageId);
     }
 }

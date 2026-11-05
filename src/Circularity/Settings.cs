@@ -59,14 +59,26 @@ internal sealed class Settings
     /// <summary>Copy the converted file path(s) to the clipboard when conversions finish.</summary>
     public bool CopyToClipboardOnFinish { get; set; } = false;
 
-    /// <summary>Automatically check for updates in the background.</summary>
-    public bool AutoCheckForUpdates { get; set; } = false;
+    /// <summary>
+    /// Automatically check for updates in the background. On for new installs since 0.5.5; files from before
+    /// keep what they say (false then, as that was the default).
+    /// </summary>
+    public bool AutoCheckForUpdates { get; set; } = true;
 
     /// <summary>How often to check for updates, in hours: 0 (only at start) or 1 to 720 (30 days).</summary>
     public int AutoCheckIntervalHours { get; set; } = 24;
 
     /// <summary>The newest release the background check has already mentioned, so it's mentioned only once.</summary>
     public string? LastNotifiedUpdate { get; set; }
+
+    /// <summary>Send the anonymous daily count (see <see cref="UsagePing"/>). Off unless the user turns it on.</summary>
+    public bool ShareUsageCount { get; set; } = false;
+
+    /// <summary>The random ID sent with the count. Made when the count is on, and dropped when it's turned off.</summary>
+    public string? UsageId { get; set; }
+
+    /// <summary>The UTC date (yyyy-MM-dd) the count was last sent, so it's sent once a day.</summary>
+    public string? LastUsagePing { get; set; }
 
     public static int ClampUpdateInterval(int hours) => hours <= 0 ? 0 : Math.Min(hours, 720);
 
@@ -126,7 +138,7 @@ internal sealed class Settings
         {
             Log.Write($"Couldn't read settings, using defaults: {ex.Message}");
         }
-        return new Settings();
+        return new Settings().Normalized();
     }
 
     /// <summary>Settings as saved, brought up to date (also used by the tests).</summary>
@@ -134,7 +146,7 @@ internal sealed class Settings
     {
         var settings = JsonSerializer.Deserialize<Settings>(json, JsonOptions);
         if (settings == null)
-            return new Settings();
+            return new Settings().Normalized();
         // Files from before versioning have no "Version" at all: they're version 1, not the current one
         // the property starts out as.
         if (JsonNode.Parse(json)?["Version"] is null)
@@ -167,6 +179,26 @@ internal sealed class Settings
         return Normalized();
     }
 
+    /// <summary>Turns the usage count on or off. Turning it back on makes a new ID, unlinked to the old one.</summary>
+    public void SetShareUsageCount(bool share)
+    {
+        ShareUsageCount = share;
+        NormalizeUsage();
+    }
+
+    private void NormalizeUsage()
+    {
+        if (!ShareUsageCount)
+        {
+            UsageId = null;
+            LastUsagePing = null;
+        }
+        else if (string.IsNullOrEmpty(UsageId))
+        {
+            UsageId = Guid.NewGuid().ToString();
+        }
+    }
+
     /// <summary>Clamps values from a hand-edited or older settings file into range.</summary>
     private Settings Normalized()
     {
@@ -178,6 +210,7 @@ internal sealed class Settings
             AccentColor = DefaultAccent;
         Presets = (Presets ?? new()).Where(p => p is { Id.Length: > 0, Name.Length: > 0 } && (p.Resize != null) != (p.Compress != null)).ToList();
         ButtonLayouts ??= new();
+        NormalizeUsage();
         return this;
     }
 }
