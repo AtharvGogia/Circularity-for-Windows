@@ -225,17 +225,49 @@ internal partial class SettingsWindow : Window
         Formats.AllTargets.Select(t => (t, $"Convert to {t.ToUpperInvariant()}"))
             .Concat(_settings.Presets.Select(p => (WatchedFolder.PresetPrefix + p.Id, $"{(p.Resize != null ? "Resize" : "Compress")}: {p.Name}")));
 
-    /// <summary>On/off, the folder, whether its subfolders count, what to do, and remove.</summary>
+    /// <summary>
+    /// Two lines: on/off, the folder's name and full path, and remove; then what to do, and whether its
+    /// subfolders count. (On one line, the path got squeezed down to its first few letters.)
+    /// </summary>
     private FrameworkElement WatchedFolderRow(WatchedFolder folder)
     {
-        var row = new DockPanel { Margin = new Thickness(0, 0, 4, 8), LastChildFill = true };
+        var top = new DockPanel { LastChildFill = true };
 
         var remove = IconButton("\uE74D", "Stop watching this folder");
         remove.Click += (_, _) => ChangeWatchedFolders(list => list.Remove(folder));
         DockPanel.SetDock(remove, Dock.Right);
-        row.Children.Add(remove);
+        top.Children.Add(remove);
 
-        var action = new ComboBox { MinWidth = 170, Margin = new Thickness(8, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
+        var on = new CheckBox
+        {
+            IsChecked = folder.Enabled,
+            ToolTip = "Watch this folder (untick to pause it)",
+            MinWidth = 0,
+            Margin = new Thickness(0, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        on.Click += (_, _) => ReplaceWatchedFolder(folder, folder with { Enabled = on.IsChecked == true });
+        DockPanel.SetDock(on, Dock.Left);
+        top.Children.Add(on);
+
+        string name = System.IO.Path.GetFileName(folder.Path.TrimEnd('\\', '/'));
+        var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Opacity = folder.Enabled ? 1 : 0.55, ToolTip = folder.Path };
+        names.Children.Add(new TextBlock
+        {
+            Text = string.IsNullOrEmpty(name) ? folder.Path : name,
+            FontWeight = FontWeights.SemiBold,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        names.Children.Add(new TextBlock
+        {
+            Text = folder.Path,
+            Opacity = 0.7,
+            FontSize = 12,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        top.Children.Add(names);
+
+        var action = new ComboBox { MinWidth = 200, VerticalAlignment = VerticalAlignment.Center };
         foreach (var (id, label) in WatchedFolderActions())
             action.Items.Add(new ComboBoxItem { Content = label, Tag = id });
         var selected = action.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == folder.Action);
@@ -251,41 +283,24 @@ internal partial class SettingsWindow : Window
             if (action.SelectedItem is ComboBoxItem { Tag: string id } && id != folder.Action)
                 ReplaceWatchedFolder(folder, folder with { Action = id });
         };
-        DockPanel.SetDock(action, Dock.Right);
-        row.Children.Add(action);
 
         var subfolders = new CheckBox
         {
-            Content = "Subfolders",
+            Content = "Subfolders too",
             IsChecked = folder.IncludeSubfolders,
             ToolTip = "Also convert new files in the folders inside it",
-            Margin = new Thickness(8, 0, 0, 0),
+            Margin = new Thickness(12, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
         subfolders.Click += (_, _) => ReplaceWatchedFolder(folder, folder with { IncludeSubfolders = subfolders.IsChecked == true });
-        DockPanel.SetDock(subfolders, Dock.Right);
-        row.Children.Add(subfolders);
 
-        var on = new CheckBox
-        {
-            IsChecked = folder.Enabled,
-            ToolTip = "Watch this folder (untick to pause it)",
-            MinWidth = 0,
-            Margin = new Thickness(0, 0, 8, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        on.Click += (_, _) => ReplaceWatchedFolder(folder, folder with { Enabled = on.IsChecked == true });
-        DockPanel.SetDock(on, Dock.Left);
-        row.Children.Add(on);
+        var options = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(28, 6, 0, 0) };
+        options.Children.Add(action);
+        options.Children.Add(subfolders);
 
-        row.Children.Add(new TextBlock
-        {
-            Text = folder.Path,
-            ToolTip = folder.Path,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            VerticalAlignment = VerticalAlignment.Center,
-            Opacity = folder.Enabled ? 1 : 0.55,
-        });
+        var row = new StackPanel { Margin = new Thickness(0, 0, 4, 12) };
+        row.Children.Add(top);
+        row.Children.Add(options);
         return row;
     }
 
