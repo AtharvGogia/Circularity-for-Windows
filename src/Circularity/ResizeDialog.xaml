@@ -32,7 +32,7 @@
                 <ComboBoxItem Tag="Fit" IsSelected="True">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Fit inside" FontWeight="SemiBold" />
-                        <TextBlock Text=" — keep aspect ratio, fill background" Opacity="0.7" Margin="8,0,0,0" />
+                        <TextBlock Text=" — keep aspect ratio" Opacity="0.7" Margin="8,0,0,0" />
                     </StackPanel>
                 </ComboBoxItem>
                 <ComboBoxItem Tag="Stretch">
@@ -41,7 +41,7 @@
                         <TextBlock Text=" — exact size, ignore aspect ratio" Opacity="0.7" Margin="8,0,0,0" />
                     </StackPanel>
                 </ComboBoxItem>
-                <ComboBoxItem Tag="FitWithBackground">
+                <ComboBoxItem x:Name="FitWithBackgroundItem" Tag="FitWithBackground">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Fit with background" FontWeight="SemiBold" />
                         <TextBlock Text=" — keep aspect ratio, custom background" Opacity="0.7" Margin="8,0,0,0" />

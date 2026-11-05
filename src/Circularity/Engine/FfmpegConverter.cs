@@ -194,7 +194,8 @@ internal sealed partial class FfmpegConverter : IConverter
     {
         (FileKind.Video, ConvertTo convert) => _argsByTarget.ContainsKey(convert.Target),
         (FileKind.Audio, ConvertTo convert) => AudioTargets.Contains(convert.Target),
-        (FileKind.Video, ResizeTo or CropTo or CompressTo) => true,
+        // A background around a video would need FFmpeg filters the bundled build leaves out.
+        (FileKind.Video, ResizeTo { Spec.Kind: not ResizeKind.FitWithBackground } or CropTo or CompressTo) => true,
         (FileKind.Video or FileKind.Audio, TrimTo) => true,
         _ => false,
     };

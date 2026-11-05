@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Windows;
 using System.Windows.Media;
 
 namespace Circularity.Engine;
@@ -119,6 +120,26 @@ internal sealed record ResizeBackground(
         new(ResizeBackgroundKind.Gradient, GradientStart: start, GradientEnd: end, GradientAngle: angle);
     public static ResizeBackground Blurred(double radius = 50, double scale = 1.0) =>
         new(ResizeBackgroundKind.BlurredSource, BlurRadius: radius, Scale: scale);
+
+    /// <summary>
+    /// Where a gradient starts and ends, in 0-1 brush coordinates. 0° runs left to right and the angle turns
+    /// anticlockwise (90° runs bottom to top). The Resize dialog's preview uses this too, so they match.
+    /// </summary>
+    public (Point Start, Point End) GradientPoints()
+    {
+        // Made before there was an angle: only the direction was set.
+        if (GradientAngle == 0 && GradientDirection != GradientDirection.Horizontal)
+            return GradientDirection switch
+            {
+                GradientDirection.Vertical => (new Point(0, 0), new Point(0, 1)),
+                GradientDirection.DiagonalUp => (new Point(0, 1), new Point(1, 0)),
+                _ => (new Point(0, 0), new Point(1, 1)),
+            };
+
+        double rad = GradientAngle * Math.PI / 180.0;
+        double dx = 0.5 * Math.Cos(rad), dy = 0.5 * Math.Sin(rad);
+        return (new Point(0.5 - dx, 0.5 + dy), new Point(0.5 + dx, 0.5 - dy));
+    }
 }
 
 internal sealed record ResizeSpec(ResizeKind Kind, int Width, int Height, ResizeBackground? Background = null, double ImageScale = 1.0)

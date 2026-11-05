@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -32,6 +33,10 @@ internal partial class ResizeDialog : Window
         SubHeading.Text = sourceSize is { } s
             ? $"Currently {s.Width} × {s.Height} px"
             : "With “Fit inside” mode, each file is scaled to fit inside this size.";
+
+        // Videos can only be fitted or stretched: there's no background around a video (see FfmpegConverter).
+        if (files.Any(f => Formats.KindOf(f) == FileKind.Video))
+            FitWithBackgroundItem.Visibility = Visibility.Collapsed;
 
         var (w, h) = sourceSize ?? (1920, 1080);
         WidthBox.Text = w.ToString(CultureInfo.InvariantCulture);
@@ -173,18 +178,9 @@ internal partial class ResizeDialog : Window
         GradientPreviewStart.Color = GradientStartPicker?.Color ?? Colors.White;
         GradientPreviewEnd.Color = GradientEndPicker?.Color ?? Colors.LightGray;
 
-        // Convert angle to StartPoint/EndPoint
-        double angle = GradientAngleSlider?.Value ?? 0;
-        double rad = angle * Math.PI / 180.0;
-
-        // Start point at angle direction, end point opposite
-        double startX = 0.5 + 0.5 * Math.Cos(rad);
-        double startY = 0.5 - 0.5 * Math.Sin(rad);
-        double endX = 0.5 - 0.5 * Math.Cos(rad);
-        double endY = 0.5 + 0.5 * Math.Sin(rad);
-
-        GradientPreviewBrush.StartPoint = new Point(startX, startY);
-        GradientPreviewBrush.EndPoint = new Point(endX, endY);
+        var (start, end) = ResizeBackground.Gradient(Colors.Black, Colors.White, GradientAngleSlider?.Value ?? 0).GradientPoints();
+        GradientPreviewBrush.StartPoint = start;
+        GradientPreviewBrush.EndPoint = end;
     }
 
     private void Blur_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)

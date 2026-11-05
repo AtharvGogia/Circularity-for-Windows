@@ -122,6 +122,36 @@ public class ResizeBackgroundTests
         Assert.Equal(GradientDirection.Horizontal, bg.GradientDirection); // legacy default
     }
 
+    [Theory]
+    [InlineData(0, 0, 0.5, 1, 0.5)]     // left to right
+    [InlineData(1, 0, 0.5, 1, 0.5)]     // a degree on: still left to right, not flipped
+    [InlineData(90, 0.5, 1, 0.5, 0)]    // bottom to top
+    [InlineData(180, 1, 0.5, 0, 0.5)]   // right to left
+    public void GradientPoints_FollowTheAngle(double angle, double startX, double startY, double endX, double endY)
+    {
+        var (start, end) = ResizeBackground.Gradient(System.Windows.Media.Colors.Black, System.Windows.Media.Colors.White, angle).GradientPoints();
+        Assert.Equal(startX, start.X, 1);
+        Assert.Equal(startY, start.Y, 1);
+        Assert.Equal(endX, end.X, 1);
+        Assert.Equal(endY, end.Y, 1);
+    }
+
+    [Fact]
+    public void GradientPoints_UseTheLegacyDirection_WhenThereIsNoAngle()
+    {
+        var (start, end) = ResizeBackground.Gradient(System.Windows.Media.Colors.Black, System.Windows.Media.Colors.White, GradientDirection.Vertical).GradientPoints();
+        Assert.Equal(new System.Windows.Point(0, 0), start);
+        Assert.Equal(new System.Windows.Point(0, 1), end);
+    }
+
+    [Fact]
+    public void Videos_GetNoBackground()
+    {
+        var ffmpeg = new FfmpegConverter();
+        Assert.True(ffmpeg.CanHandle("clip.mp4", new ResizeTo(new ResizeSpec(ResizeKind.Fit, 640, 480))));
+        Assert.False(ffmpeg.CanHandle("clip.mp4", new ResizeTo(new ResizeSpec(ResizeKind.FitWithBackground, 640, 480, ResizeBackground.Solid(System.Windows.Media.Colors.Black)))));
+    }
+
     [Fact]
     public void Blurred_CreatesCorrectBackground()
     {

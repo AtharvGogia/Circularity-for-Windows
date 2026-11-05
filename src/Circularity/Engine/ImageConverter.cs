@@ -202,38 +202,7 @@ internal sealed class ImageConverter : IConverter
             case ResizeBackgroundKind.Gradient:
                 if (bg.GradientStart is Color start && bg.GradientEnd is Color end)
                 {
-                    Point startPoint, endPoint;
-
-                    // Use GradientAngle if set (non-zero), otherwise fall back to GradientDirection
-                    if (bg.GradientAngle != 0)
-                    {
-                        double rad = bg.GradientAngle * Math.PI / 180.0;
-                        // Start point at angle direction from center, end point opposite
-                        startPoint = new Point(0.5 + 0.5 * Math.Cos(rad), 0.5 - 0.5 * Math.Sin(rad));
-                        endPoint = new Point(0.5 - 0.5 * Math.Cos(rad), 0.5 + 0.5 * Math.Sin(rad));
-                    }
-                    else
-                    {
-                        switch (bg.GradientDirection)
-                        {
-                            case GradientDirection.Vertical:
-                                startPoint = new Point(0, 0);
-                                endPoint = new Point(0, 1);
-                                break;
-                            case GradientDirection.DiagonalUp:
-                                startPoint = new Point(0, 1);
-                                endPoint = new Point(1, 0);
-                                break;
-                            case GradientDirection.DiagonalDown:
-                                startPoint = new Point(0, 0);
-                                endPoint = new Point(1, 1);
-                                break;
-                            default: // Horizontal
-                                startPoint = new Point(0, 0);
-                                endPoint = new Point(1, 0);
-                                break;
-                        }
-                    }
+                    var (startPoint, endPoint) = bg.GradientPoints();
                     var brush = new LinearGradientBrush(start, end, startPoint, endPoint);
                     dc.DrawRectangle(brush, null, rect);
                 }
