@@ -10,7 +10,9 @@ mid-drag, and drop it on a button in the wheel that pops up around it.
 
 ![Dragging a photo, tapping right-click, opening More, and dropping it on GIF](docs/media/drag.gif)
 
-Everything happens on your PC: nothing is uploaded, and the original file is never changed.
+Everything happens on your PC: your files are never uploaded, and the original is never changed.
+(Circularity only goes online to check for updates and to send one anonymous count a day; see
+[Privacy](#privacy).)
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/AtharvGogia/Circularity-for-Windows?include_prereleases&label=Latest%20Release)](https://github.com/AtharvGogia/Circularity-for-Windows/releases)
@@ -178,9 +180,10 @@ Settings is live: hover and click it, and switch it between image, video, audio 
 - **Features**: where to **save converted files** (next to the original, or a folder you choose),
   **copy converted files to the clipboard** when conversions finish (the files
   themselves, like Ctrl+C in File Explorer, so you can paste them into another folder or app), and
-  **check for updates automatically**, off by default: when Circularity starts, or every day, 3
+  **check for updates automatically**, on by default: when Circularity starts, or every day, 3
   days, week or 30 days. A new version is mentioned once, in a notification that opens the
-  update window
+  update window. Also **help count how many people use Circularity**, on by default (see
+  [Privacy](#privacy))
 - **Help**: the tutorial, the welcome guide, and **Report a bug**, which opens a new GitHub issue
   and copies the diagnostics (below) to the clipboard to paste into it. They stay on the clipboard,
   never in the web address, since they include folder paths
@@ -378,13 +381,40 @@ smooth out over time.
 
 ## Publishing a release
 
-The in-app updater looks at this repository's latest GitHub release, so a release must:
+Releases are built by GitHub Actions from the source at the tag, so every installer matches its
+code:
 
-1. be tagged `vx.y.z`, where `x.y.z` is `<Version>` in `src/Circularity/Circularity.csproj`, and
-2. have the installer from `build\build.ps1`, `CircularitySetup-x.y.z.exe`, attached as an asset.
+1. Set `<Version>` in `src/Circularity/Circularity.csproj` to `x.y.z`.
+2. Write the release notes in `docs/releases/x.y.z.md`, ending with a "For developers" section.
+3. Commit, then push a tag: `git tag vx.y.z && git push origin vx.y.z`.
+
+The `installer` job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the tests,
+builds FFmpeg (cached until its build script changes) and the installer with `build\build.ps1`,
+and publishes the release with `CircularitySetup-x.y.z.exe` attached. It refuses a tag that doesn't
+match `<Version>`, or one without notes. To build the installer without releasing it, run the
+workflow by hand from the Actions tab; the installer is attached to the run.
 
 Whatever is written in the release's description is shown in the update window as "what's new".
 The repository has to be public for the updater to see releases.
+
+## Privacy
+
+Your files never leave your PC. Circularity goes online for two things, and you can turn off
+either one in **Settings → Features**:
+
+- **Checking for updates** (on by default): it asks GitHub for the latest release, at the interval
+  you choose.
+- **A daily count of how many people use it** (on by default): at most once a day, it sends a
+  random ID made when the count was turned on, and the version number, like
+  `{"id": "3f2b…", "version": "x.y.z"}`. Nothing else: no files, file names, folder paths, or
+  account or computer names. The ID isn't tied to you; turning the count off deletes it, and
+  turning it back on makes a new one.
+
+The count goes to a small Cloudflare Worker whose code is in [`server/usage`](server/usage). It
+keeps one row per ID per day (the day comes from the server's clock), never reads or stores your IP
+address, and deletes rows after 90 days. The only thing it shows is the totals (people today, this
+week, this month, and which versions), which I use to know whether anyone's actually using this.
+The first time Circularity starts after either of these turns on, a notification says so.
 
 ## Feedback
 

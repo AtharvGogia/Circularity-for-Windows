@@ -102,6 +102,7 @@ internal partial class SettingsWindow : Window
         CopyClipboardCheck.Click += (_, _) => OnControlChanged();
         NotifyStartCheck.Click += (_, _) => OnControlChanged();
         AutoCheckUpdatesCheck.Click += (_, _) => OnAutoCheckToggled();
+        ShareUsageCheck.Click += (_, _) => OnControlChanged();
         AutoCheckIntervalCombo.SelectionChanged += (_, _) => OnControlChanged();
         SaveBesideRadio.Checked += (_, _) => OnControlChanged();
         SaveToFolderRadio.Checked += (_, _) =>
@@ -135,6 +136,7 @@ internal partial class SettingsWindow : Window
         CopyClipboardCheck.IsChecked = _settings.CopyToClipboardOnFinish;
         NotifyStartCheck.IsChecked = _settings.NotifyOnStart;
         AutoCheckUpdatesCheck.IsChecked = _settings.AutoCheckForUpdates;
+        ShareUsageCheck.IsChecked = _settings.ShareUsageCount;
         PopulateAutoCheckIntervals();
         int savedHours = Settings.ClampUpdateInterval(_settings.AutoCheckIntervalHours);
         foreach (ComboBoxItem item in AutoCheckIntervalCombo.Items)
@@ -227,6 +229,7 @@ internal partial class SettingsWindow : Window
         _settings.CopyToClipboardOnFinish = CopyClipboardCheck.IsChecked == true;
         _settings.NotifyOnStart = NotifyStartCheck.IsChecked == true;
         _settings.AutoCheckForUpdates = AutoCheckUpdatesCheck.IsChecked == true;
+        _settings.SetShareUsageCount(ShareUsageCheck.IsChecked == true);
         _settings.AutoCheckIntervalHours = (AutoCheckIntervalCombo.SelectedItem as ComboBoxItem)?.Tag as int? ?? 24;
         _settings.OutputFolder = SaveToFolderRadio.IsChecked == true ? _chosenFolder : null;
         _settings.Theme = LightTheme.IsChecked == true ? AppTheme.Light
@@ -577,6 +580,12 @@ internal partial class SettingsWindow : Window
     private void Welcome_Click(object sender, RoutedEventArgs e) => WelcomeRequested?.Invoke();
 
     private void ReportBug_Click(object sender, RoutedEventArgs e) => BugReportRequested?.Invoke();
+
+    /// <summary>Opens the Features tab, where the update and usage count options are.</summary>
+    public void ShowFeatures() => Tabs.SelectedItem = FeaturesTab;
+
+    private void UsageDetails_Click(object sender, RoutedEventArgs e) =>
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"https://github.com/{UpdateChecker.Repository}#privacy") { UseShellExecute = true });
 
     private void SourceCode_Click(object sender, RoutedEventArgs e) =>
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"https://github.com/{UpdateChecker.Repository}") { UseShellExecute = true });

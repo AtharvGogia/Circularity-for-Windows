@@ -42,6 +42,10 @@
             <TextBlock Opacity="0.75" TextWrapping="Wrap" Margin="0,8,0,0"
                        Text="See this again, or the full tutorial, from the tray icon's menu under Help." />
 
+            <CheckBox x:Name="ShareUsageCheck" Content="Help count how many people use Circularity" Margin="0,16,0,0" />
+            <TextBlock Opacity="0.75" TextWrapping="Wrap" Margin="24,2,0,0"
+                       Text="Once a day: a random ID and the version number. No files, names or addresses. You can change this in Settings." />
+
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,28,0,0">
                 <Button Content="Full tutorial" Click="Tutorial_Click" Margin="0,0,8,0"
                         ToolTip="Everything Circularity can do, one chapter at a time." />

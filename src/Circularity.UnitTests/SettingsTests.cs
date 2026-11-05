@@ -8,7 +8,7 @@ namespace Circularity.UnitTests;
 public class SettingsMigrationTests
 {
     [Fact]
-    public void Migrate_Version1To2_SetsVersionTo2()
+    public void Migrate_Version1_MovesToCurrentVersion()
     {
         // Simulate loading v1 settings (no Version field = defaults to 1)
         var v1Json = """
@@ -36,7 +36,7 @@ public class SettingsMigrationTests
 
         var settings = Settings.FromJson(v1Json);
 
-        Assert.Equal(2, settings.Version);
+        Assert.Equal(3, settings.Version);
         Assert.Equal("#8B5CF6", settings.AccentColor); // Old default migrated to new
         Assert.False(settings.CopyToClipboardOnFinish); // Defaults to false
     }
@@ -44,9 +44,9 @@ public class SettingsMigrationTests
     [Fact]
     public void Migrate_VersionAlreadyCurrent_NoChanges()
     {
-        var v2Json = """
+        var v3Json = """
             {
-                "Version": 2,
+                "Version": 3,
                 "WheelSize": 300,
                 "AccentColor": "#22C55E",
                 "AccentChosen": true,
@@ -68,9 +68,9 @@ public class SettingsMigrationTests
             }
             """;
 
-        var settings = Settings.FromJson(v2Json);
+        var settings = Settings.FromJson(v3Json);
 
-        Assert.Equal(2, settings.Version);
+        Assert.Equal(3, settings.Version);
         Assert.Equal("#22C55E", settings.AccentColor); // Custom color preserved
         Assert.True(settings.CopyToClipboardOnFinish); // Preserved
     }
@@ -86,7 +86,7 @@ public class SettingsMigrationTests
             // Can't easily test this without modifying FilePath, so just verify defaults
             var defaults = new Settings();
             Assert.Equal(Settings.CurrentVersion, defaults.Version);
-            Assert.Equal(2, defaults.Version);
+            Assert.Equal(3, defaults.Version);
         }
         finally
         {
@@ -100,7 +100,7 @@ public class SettingsMigrationTests
     {
         var settings = new Settings
         {
-            Version = 2,
+            Version = 3,
             WheelSize = 300,
             AccentColor = "#22C55E",
             AccentChosen = true,
@@ -112,7 +112,7 @@ public class SettingsMigrationTests
         {
             File.WriteAllText(tempPath, System.Text.Json.JsonSerializer.Serialize(settings));
             var loaded = Settings.FromJson(File.ReadAllText(tempPath));
-            Assert.Equal(2, loaded.Version);
+            Assert.Equal(3, loaded.Version);
             Assert.Equal(300, loaded.WheelSize);
             Assert.True(loaded.CopyToClipboardOnFinish);
         }
@@ -121,5 +121,47 @@ public class SettingsMigrationTests
             if (File.Exists(tempPath))
                 File.Delete(tempPath);
         }
+    }
+
+    [Fact]
+    public void Migrate_Version2_TurnsOnUpdateChecksAndUsageCount()
+    {
+        var settings = Settings.FromJson("""{"Version": 2, "AutoCheckForUpdates": false}""");
+
+        Assert.Equal(3, settings.Version);
+        Assert.True(settings.AutoCheckForUpdates);
+        Assert.True(settings.ShareUsageCount);
+        Assert.False(string.IsNullOrEmpty(settings.UsageId));
+    }
+
+    [Fact]
+    public void Version3_KeepsChoicesToTurnThingsOff()
+    {
+        var settings = Settings.FromJson("""{"Version": 3, "AutoCheckForUpdates": false, "ShareUsageCount": false, "UsageId": "old", "LastUsagePing": "2026-01-01"}""");
+
+        Assert.False(settings.AutoCheckForUpdates);
+        Assert.False(settings.ShareUsageCount);
+        Assert.Null(settings.UsageId);
+        Assert.Null(settings.LastUsagePing);
+    }
+
+    [Fact]
+    public void FreshSettings_GetAUsageId()
+    {
+        Assert.False(string.IsNullOrEmpty(Settings.FromJson("{}").UsageId));
+    }
+
+    [Fact]
+    public void SetShareUsageCount_OffClearsTheIdAndOnMakesANewOne()
+    {
+        var settings = Settings.FromJson("{}");
+        string first = settings.UsageId!;
+
+        settings.SetShareUsageCount(false);
+        Assert.Null(settings.UsageId);
+        settings.SetShareUsageCount(true);
+
+        Assert.False(string.IsNullOrEmpty(settings.UsageId));
+        Assert.NotEqual(first, settings.UsageId);
     }
 }
