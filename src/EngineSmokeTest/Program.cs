@@ -140,8 +140,6 @@ internal static class Program
                 Tag("v0.3.3.1") > Tag("v0.3.3") && Tag("v0.3.3") == new Version(0, 3, 3, 0) && Tag("v0.3.4") > Tag("v0.3.3.1") && Tag("0.3.3.1.5") == new Version(0, 0, 0, 0),
                 $"{Tag("v0.3.3.1")}, {Tag("v0.3.3")}, {Tag("v0.3.4")}");
 
-            await UsagePingTest.Run(Check);
-
             // 5. A multi-file batch reports once, with every job finished.
             {
                 var batch = await Run(queue, new[] { image, image }, new ConvertTo("bmp"));

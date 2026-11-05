@@ -26,13 +26,9 @@ internal partial class WelcomeWindow : Window
     /// <summary>Raised when "Full tutorial" is clicked.</summary>
     public event Action? TutorialRequested;
 
-    /// <summary>Whether "Help count how many people use Circularity" is ticked.</summary>
-    public bool ShareUsageCount => ShareUsageCheck.IsChecked == true;
-
     public WelcomeWindow(Settings settings)
     {
         InitializeComponent();
-        ShareUsageCheck.IsChecked = settings.ShareUsageCount;
 
         var small = settings.Clone();
         small.WheelSize = 240;

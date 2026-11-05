@@ -119,7 +119,7 @@
                     </ScrollViewer>
                 </TabItem>
 
-                <TabItem x:Name="FeaturesTab" Header="Features">
+                <TabItem Header="Features">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="4,12,12,8">
                             <TextBlock Text="Save converted files" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
@@ -143,13 +143,6 @@
                                 <ComboBox x:Name="AutoCheckIntervalCombo" MinWidth="200" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="8,0,0,0" />
                             </DockPanel>
                             <TextBlock Text="Checks run silently. If an update is found, you'll get a notification." Opacity="0.7" Margin="18,4,0,0" TextWrapping="Wrap" />
-
-                            <TextBlock Text="Usage count" FontSize="16" FontWeight="SemiBold" Margin="0,24,0,8" />
-                            <CheckBox x:Name="ShareUsageCheck" Content="Help count how many people use Circularity" />
-                            <TextBlock Opacity="0.7" Margin="18,4,0,0" TextWrapping="Wrap">
-                                <Run Text="Once a day: a random ID and the version number. No files, names or addresses. " />
-                                <Hyperlink Click="UsageDetails_Click">What's sent</Hyperlink>
-                            </TextBlock>
                         </StackPanel>
                     </ScrollViewer>
                 </TabItem>

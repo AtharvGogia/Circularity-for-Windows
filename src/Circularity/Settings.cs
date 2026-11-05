@@ -13,7 +13,7 @@ namespace Circularity;
 internal sealed class Settings
 {
     /// <summary>Current settings schema version. Increment when adding fields that need migration.</summary>
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 2;
 
     public const int MinWheelSize = 200;
     public const int MaxWheelSize = 360;
@@ -60,25 +60,13 @@ internal sealed class Settings
     public bool CopyToClipboardOnFinish { get; set; } = false;
 
     /// <summary>Automatically check for updates in the background.</summary>
-    public bool AutoCheckForUpdates { get; set; } = true;
+    public bool AutoCheckForUpdates { get; set; } = false;
 
     /// <summary>How often to check for updates, in hours: 0 (only at start) or 1 to 720 (30 days).</summary>
     public int AutoCheckIntervalHours { get; set; } = 24;
 
     /// <summary>The newest release the background check has already mentioned, so it's mentioned only once.</summary>
     public string? LastNotifiedUpdate { get; set; }
-
-    /// <summary>Send the anonymous daily count (see <see cref="UsagePing"/>).</summary>
-    public bool ShareUsageCount { get; set; } = true;
-
-    /// <summary>The random ID sent with the count. Made when the count is on, and dropped when it's turned off.</summary>
-    public string? UsageId { get; set; }
-
-    /// <summary>The UTC date (yyyy-MM-dd) the count was last sent, so it's sent once a day.</summary>
-    public string? LastUsagePing { get; set; }
-
-    /// <summary>Set once the one-time notice about update checks and the count has been shown.</summary>
-    public bool UsageNoticeShown { get; set; }
 
     public static int ClampUpdateInterval(int hours) => hours <= 0 ? 0 : Math.Min(hours, 720);
 
@@ -138,7 +126,7 @@ internal sealed class Settings
         {
             Log.Write($"Couldn't read settings, using defaults: {ex.Message}");
         }
-        return new Settings().Normalized();
+        return new Settings();
     }
 
     /// <summary>Settings as saved, brought up to date (also used by the tests).</summary>
@@ -146,7 +134,7 @@ internal sealed class Settings
     {
         var settings = JsonSerializer.Deserialize<Settings>(json, JsonOptions);
         if (settings == null)
-            return new Settings().Normalized();
+            return new Settings();
         // Files from before versioning have no "Version" at all: they're version 1, not the current one
         // the property starts out as.
         if (JsonNode.Parse(json)?["Version"] is null)
@@ -176,35 +164,7 @@ internal sealed class Settings
             Version = 2;
             // CopyToClipboardOnFinish defaults to false, which is correct for v1->2
         }
-        // Version 2 -> 3: updates are checked for, and the count sent, unless turned off. A false saved
-        // before this couldn't be told apart from a choice (as with the old accent), so it moves to the new default.
-        if (Version < 3)
-        {
-            Version = 3;
-            AutoCheckForUpdates = true;
-            ShareUsageCount = true;
-        }
         return Normalized();
-    }
-
-    /// <summary>Turns the usage count on or off. Turning it back on makes a new ID, unlinked to the old one.</summary>
-    public void SetShareUsageCount(bool share)
-    {
-        ShareUsageCount = share;
-        NormalizeUsage();
-    }
-
-    private void NormalizeUsage()
-    {
-        if (!ShareUsageCount)
-        {
-            UsageId = null;
-            LastUsagePing = null;
-        }
-        else if (string.IsNullOrEmpty(UsageId))
-        {
-            UsageId = Guid.NewGuid().ToString();
-        }
     }
 
     /// <summary>Clamps values from a hand-edited or older settings file into range.</summary>
@@ -218,7 +178,6 @@ internal sealed class Settings
             AccentColor = DefaultAccent;
         Presets = (Presets ?? new()).Where(p => p is { Id.Length: > 0, Name.Length: > 0 } && (p.Resize != null) != (p.Compress != null)).ToList();
         ButtonLayouts ??= new();
-        NormalizeUsage();
         return this;
     }
 }

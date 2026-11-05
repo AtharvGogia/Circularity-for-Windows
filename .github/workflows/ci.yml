@@ -3,12 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
-    # Pushing a version tag (v1.2.3) also builds the installer and publishes the release.
-    tags: ['v*']
   pull_request:
     branches: [main]
-  # Run by hand from the Actions tab to build the installer without releasing it.
-  workflow_dispatch:
 
 env:
   DOTNET_VERSION: '10.0.x'
@@ -74,79 +70,6 @@ jobs:
       - name: Check code formatting
         run: dotnet format src/Circularity.sln --verify-no-changes --verbosity diagnostic
 
-  # The installer: built from source on every tag push (and on demand), so a release always matches
-  # its tag. The tag must match <Version> in Circularity.csproj, and the release notes must be in
-  # docs/releases/<version>.md (they end with a "For developers" section).
-  installer:
-    needs: [build-and-test, check-format]
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    runs-on: windows-latest
-    timeout-minutes: 120
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Read the version
-        id: version
-        run: |
-          $version = (dotnet msbuild src/Circularity/Circularity.csproj -getProperty:Version).Trim()
-          "version=$version" >> $env:GITHUB_OUTPUT
-          if ($env:GITHUB_REF -like 'refs/tags/v*' -and $env:GITHUB_REF_NAME -ne "v$version") {
-            throw "Tag $env:GITHUB_REF_NAME doesn't match <Version>$version</Version> in Circularity.csproj."
-          }
-          if ($env:GITHUB_REF -like 'refs/tags/v*' -and -not (Test-Path "docs/releases/$version.md")) {
-            throw "Release notes docs/releases/$version.md are missing."
-          }
-
-      # The slim FFmpeg takes a while to build, so it's kept until its build script changes.
-      # MSYS2, which the script uses, is preinstalled on the runners at C:\msys64.
-      - name: Cache FFmpeg
-        id: ffmpeg-cache
-        uses: actions/cache@v4
-        with:
-          path: build/ffmpeg/out
-          key: ffmpeg-${{ hashFiles('build/ffmpeg/build-ffmpeg.sh', 'build/ffmpeg/build-ffmpeg.ps1') }}
-
-      - name: Build FFmpeg
-        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
-        run: |
-          # The runner's MSYS2 package lists can be out of date; bring MSYS2 up to date first
-          # (twice: the first pass may only update pacman itself).
-          C:\msys64\usr\bin\bash.exe -lc "pacman -Syu --noconfirm"
-          C:\msys64\usr\bin\bash.exe -lc "pacman -Syu --noconfirm"
-          ./build/ffmpeg/build-ffmpeg.ps1
-
-      - name: Install Inno Setup
-        run: |
-          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
-            choco install innosetup --no-progress -y
-          }
-
-      - name: Build the app and installer
-        run: ./build/build.ps1
-
-      - name: Upload the installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: CircularitySetup-${{ steps.version.outputs.version }}
-          path: artifacts/CircularitySetup-${{ steps.version.outputs.version }}.exe
-          retention-days: 30
-
-      - name: Publish the release
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $version = '${{ steps.version.outputs.version }}'
-          $setup = "artifacts/CircularitySetup-$version.exe"
-          gh release create "v$version" $setup --title "Circularity $version" --notes-file "docs/releases/$version.md" --verify-tag --latest
-          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-          "Published v$version. SHA-256 of the installer: $hash" >> $env:GITHUB_STEP_SUMMARY
+# Releases are built and published by hand (build/build.ps1, then `gh release create` with written
+# notes): the installer bundles a custom FFmpeg build and needs Inno Setup, neither of which is on
+# the runners yet.
