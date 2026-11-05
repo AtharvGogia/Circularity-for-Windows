@@ -27,8 +27,16 @@ mkdir -p "$WORK"
 cd "$WORK"
 if [ ! -d "ffmpeg-$FFMPEG_VERSION" ]; then
     echo "==> Downloading FFmpeg $FFMPEG_VERSION source"
-    curl -fL --retry 3 -o "ffmpeg-$FFMPEG_VERSION.tar.xz" "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz"
-    tar -xf "ffmpeg-$FFMPEG_VERSION.tar.xz"
+    # ffmpeg.org refuses connections from GitHub's runners, so FFmpeg's official GitHub mirror is the
+    # fallback: the same release, from its "n" tag, unpacked under the same folder name.
+    if curl -fL --retry 3 --connect-timeout 20 -o "ffmpeg-$FFMPEG_VERSION.tar.xz" "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz"; then
+        tar -xf "ffmpeg-$FFMPEG_VERSION.tar.xz"
+    else
+        echo "==> ffmpeg.org didn't answer; using FFmpeg's GitHub mirror"
+        curl -fL --retry 3 -o "ffmpeg-$FFMPEG_VERSION.tar.gz" "https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n$FFMPEG_VERSION.tar.gz"
+        tar -xf "ffmpeg-$FFMPEG_VERSION.tar.gz"
+        mv "FFmpeg-n$FFMPEG_VERSION" "ffmpeg-$FFMPEG_VERSION"
+    fi
 fi
 cd "ffmpeg-$FFMPEG_VERSION"
 
