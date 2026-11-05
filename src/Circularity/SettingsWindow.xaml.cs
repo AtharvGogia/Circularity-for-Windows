@@ -155,6 +155,7 @@ internal partial class SettingsWindow : Window
         SaveToFolderRadio.IsChecked = !string.IsNullOrWhiteSpace(_settings.OutputFolder);
         SaveBesideRadio.IsChecked = !SaveToFolderRadio.IsChecked;
         ShowChosenFolder();
+        BuildWatchedFolders();
         SystemTheme.IsChecked = _settings.Theme == AppTheme.System;
         LightTheme.IsChecked = _settings.Theme == AppTheme.Light;
         DarkTheme.IsChecked = _settings.Theme == AppTheme.Dark;
@@ -199,6 +200,108 @@ internal partial class SettingsWindow : Window
         _chosenFolder = dialog.FolderName;
         ShowChosenFolder();
         return true;
+    }
+
+    private void AddWatchedFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "Convert new files in this folder" };
+        if (dialog.ShowDialog(this) != true)
+            return;
+        string path = dialog.FolderName;
+        if (_settings.WatchedFolders.Any(w => string.Equals(w.Path, path, StringComparison.OrdinalIgnoreCase)))
+            return;
+        ChangeWatchedFolders(list => list.Add(new WatchedFolder(WatchedFolder.NewId(), path, "jpg")));
+    }
+
+    private void BuildWatchedFolders()
+    {
+        WatchedFoldersPanel.Children.Clear();
+        foreach (var folder in _settings.WatchedFolders)
+            WatchedFoldersPanel.Children.Add(WatchedFolderRow(folder));
+    }
+
+    /// <summary>What a watched folder can do: convert to any format, or apply a saved preset.</summary>
+    private IEnumerable<(string Action, string Label)> WatchedFolderActions() =>
+        Formats.AllTargets.Select(t => (t, $"Convert to {t.ToUpperInvariant()}"))
+            .Concat(_settings.Presets.Select(p => (WatchedFolder.PresetPrefix + p.Id, $"{(p.Resize != null ? "Resize" : "Compress")}: {p.Name}")));
+
+    /// <summary>On/off, the folder, whether its subfolders count, what to do, and remove.</summary>
+    private FrameworkElement WatchedFolderRow(WatchedFolder folder)
+    {
+        var row = new DockPanel { Margin = new Thickness(0, 0, 4, 8), LastChildFill = true };
+
+        var remove = IconButton("\uE74D", "Stop watching this folder");
+        remove.Click += (_, _) => ChangeWatchedFolders(list => list.Remove(folder));
+        DockPanel.SetDock(remove, Dock.Right);
+        row.Children.Add(remove);
+
+        var action = new ComboBox { MinWidth = 170, Margin = new Thickness(8, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
+        foreach (var (id, label) in WatchedFolderActions())
+            action.Items.Add(new ComboBoxItem { Content = label, Tag = id });
+        var selected = action.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == folder.Action);
+        if (selected == null)
+        {
+            // Its preset was deleted: new files are left alone until something else is picked.
+            selected = new ComboBoxItem { Content = "(a deleted preset)", Tag = folder.Action };
+            action.Items.Add(selected);
+        }
+        action.SelectedItem = selected;
+        action.SelectionChanged += (_, _) =>
+        {
+            if (action.SelectedItem is ComboBoxItem { Tag: string id } && id != folder.Action)
+                ReplaceWatchedFolder(folder, folder with { Action = id });
+        };
+        DockPanel.SetDock(action, Dock.Right);
+        row.Children.Add(action);
+
+        var subfolders = new CheckBox
+        {
+            Content = "Subfolders",
+            IsChecked = folder.IncludeSubfolders,
+            ToolTip = "Also convert new files in the folders inside it",
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        subfolders.Click += (_, _) => ReplaceWatchedFolder(folder, folder with { IncludeSubfolders = subfolders.IsChecked == true });
+        DockPanel.SetDock(subfolders, Dock.Right);
+        row.Children.Add(subfolders);
+
+        var on = new CheckBox
+        {
+            IsChecked = folder.Enabled,
+            ToolTip = "Watch this folder (untick to pause it)",
+            MinWidth = 0,
+            Margin = new Thickness(0, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        on.Click += (_, _) => ReplaceWatchedFolder(folder, folder with { Enabled = on.IsChecked == true });
+        DockPanel.SetDock(on, Dock.Left);
+        row.Children.Add(on);
+
+        row.Children.Add(new TextBlock
+        {
+            Text = folder.Path,
+            ToolTip = folder.Path,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center,
+            Opacity = folder.Enabled ? 1 : 0.55,
+        });
+        return row;
+    }
+
+    private void ReplaceWatchedFolder(WatchedFolder old, WatchedFolder updated) => ChangeWatchedFolders(list =>
+    {
+        int index = list.IndexOf(old);
+        if (index >= 0)
+            list[index] = updated;
+    });
+
+    private void ChangeWatchedFolders(Action<List<WatchedFolder>> change)
+    {
+        change(_settings.WatchedFolders);
+        // Rebuilt after the event that changed it has finished, since that control is about to be replaced.
+        Dispatcher.BeginInvoke(BuildWatchedFolders);
+        SettingsChanged?.Invoke(_settings.Clone());
     }
 
     private void ShowChosenFolder()
@@ -414,6 +517,8 @@ internal partial class SettingsWindow : Window
             layout.Hidden.Remove(id);
         }
         ButtonsChanged();
+        // A watched folder using it now shows "(a deleted preset)".
+        BuildWatchedFolders();
     }
 
     private void ResetOrder_Click(object sender, RoutedEventArgs e)
@@ -565,8 +670,8 @@ internal partial class SettingsWindow : Window
 
     private void Reset_Click(object sender, RoutedEventArgs e)
     {
-        // Not preferences, so resetting shouldn't bring the welcome back or delete the user's buttons.
-        _settings = new Settings { WelcomeShown = _settings.WelcomeShown, Presets = _settings.Presets };
+        // Not preferences, so resetting shouldn't bring the welcome back or delete the user's buttons or watched folders.
+        _settings = new Settings { WelcomeShown = _settings.WelcomeShown, Presets = _settings.Presets, WatchedFolders = _settings.WatchedFolders };
         LoadControls();
         SettingsChanged?.Invoke(_settings.Clone());
     }

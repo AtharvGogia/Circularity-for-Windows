@@ -305,6 +305,21 @@ internal static class Formats
         return settings.ButtonLayouts.TryGetValue(kind.ToString(), out var layout) ? Arrange(all, layout) : all;
     }
 
+    /// <summary>Every format anything can be converted to, for a watched folder's choice of what to do.</summary>
+    public static IReadOnlyList<string> AllTargets { get; } = ImageTargets.Concat(VideoTargets).Concat(AudioTargets)
+        .Concat(DocumentTargets.Values.SelectMany(t => t)).Distinct().ToList();
+
+    /// <summary>
+    /// Whether a watched folder's action suits a new file: a conversion the file's type is offered, or a
+    /// preset whose tool it has (a compression, only for the kind it was saved from).
+    /// </summary>
+    public static bool Suits(string file, Operation operation, Preset? preset) => operation switch
+    {
+        ConvertTo convert => Offers(file, convert.Target),
+        _ when preset?.Compress != null => preset.CompressesKind == KindOf(file),
+        _ => KindOf(file) is FileKind.Image or FileKind.Video,
+    };
+
     /// <summary>Whether a file of this type is ever offered a conversion to <paramref name="target"/>.</summary>
     public static bool Offers(string file, string target) =>
         NormalizedExtension(file) != target && CandidateTargets(file).Contains(target);

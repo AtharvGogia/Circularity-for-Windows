@@ -88,6 +88,9 @@ internal sealed class Settings
     /// <summary>Saved resize and compress settings, offered on the wheel as one-click buttons.</summary>
     public List<Preset> Presets { get; set; } = new();
 
+    /// <summary>Folders where every new file is converted (or has a preset applied) as soon as it arrives.</summary>
+    public List<WatchedFolder> WatchedFolders { get; set; } = new();
+
     /// <summary>
     /// The user's button order, and buttons left off the wheel, per kind of file ("Image", "Video"...).
     /// Kinds that aren't listed use the built-in order.
@@ -123,6 +126,7 @@ internal sealed class Settings
     {
         var copy = (Settings)MemberwiseClone();
         copy.Presets = new List<Preset>(Presets);
+        copy.WatchedFolders = new List<WatchedFolder>(WatchedFolders);
         copy.ButtonLayouts = ButtonLayouts.ToDictionary(pair => pair.Key, pair => pair.Value.Clone());
         return copy;
     }
@@ -210,6 +214,7 @@ internal sealed class Settings
             AccentColor = DefaultAccent;
         Presets = (Presets ?? new()).Where(p => p is { Id.Length: > 0, Name.Length: > 0 } && (p.Resize != null) != (p.Compress != null)).ToList();
         ButtonLayouts ??= new();
+        WatchedFolders = (WatchedFolders ?? new()).Where(w => w is { Id.Length: > 0, Path.Length: > 0, Action.Length: > 0 }).ToList();
         NormalizeUsage();
         return this;
     }
@@ -227,6 +232,26 @@ internal sealed record Preset(string Id, string Name, ResizeSpec? Resize = null,
     public Operation Operation => Resize != null ? new ResizeTo(Resize) : new CompressTo(Compress!);
 
     public static string NewId() => Guid.NewGuid().ToString("N")[..8];
+}
+
+/// <summary>
+/// A folder Circularity watches: each new file in it gets <paramref name="Action"/>, which is a target
+/// to convert to ("jpg") or a saved preset ("preset:1a2b3c4d"), like <see cref="WheelAction.Id"/>.
+/// </summary>
+internal sealed record WatchedFolder(string Id, string Path, string Action, bool IncludeSubfolders = false, bool Enabled = true)
+{
+    public const string PresetPrefix = "preset:";
+
+    public static string NewId() => Guid.NewGuid().ToString("N")[..8];
+
+    /// <summary>What to do to each new file, or null when it's a preset that has since been deleted.</summary>
+    public Operation? OperationFor(Settings settings)
+    {
+        if (!Action.StartsWith(PresetPrefix, StringComparison.Ordinal))
+            return new ConvertTo(Action);
+        string id = Action[PresetPrefix.Length..];
+        return settings.Presets.FirstOrDefault(p => p.Id == id)?.Operation;
+    }
 }
 
 /// <summary>For one kind of file: button IDs (see <see cref="WheelAction.Id"/>) in the user's order, and the hidden ones.</summary>
