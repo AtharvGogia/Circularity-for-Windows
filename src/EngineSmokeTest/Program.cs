@@ -125,6 +125,7 @@ internal static class Program
             await OutputFolderChecks(queue, dir, image);
             await HeicAvifOutputChecks(queue, ffmpeg, dir, photo);
             await ResizeBackgroundChecks(queue, dir);
+            await WatchedFolderChecks(queue, dir, image);
 
             // The default colour moved from orange to violet in 0.5.1: settings still on the old default
             // move with it, but an orange someone picked (or any other colour) stays.
@@ -950,6 +951,45 @@ internal static class Program
         {
             OutputPaths.SaveTo = null;
         }
+    }
+
+    /// <summary>
+    /// A watched folder end to end: a picture copied in is converted, and the result, written into the same
+    /// folder, isn't picked up and converted again.
+    /// </summary>
+    private static async Task WatchedFolderChecks(ConversionQueue queue, string dir, string image)
+    {
+        string watched = Path.Combine(dir, "watched");
+        Directory.CreateDirectory(watched);
+        var arrivals = new System.Collections.Concurrent.ConcurrentQueue<IReadOnlyList<string>>();
+        var converted = new TaskCompletionSource<ConversionBatch>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var watcher = new FolderWatcher(OutputPaths.IsProduced, batchDelay: TimeSpan.FromMilliseconds(500));
+        watcher.FilesArrived += async (_, files) =>
+        {
+            arrivals.Enqueue(files);
+            converted.TrySetResult(await Run(queue, files, new ConvertTo("jpg")));
+        };
+        watcher.Update(new[] { new WatchedFolder("smoke", watched, "jpg") });
+
+        string copied = Path.Combine(watched, "dropped.png");
+        File.Copy(image, copied);
+        ConversionBatch? batch = null;
+        try
+        {
+            batch = await converted.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        }
+        catch (TimeoutException)
+        {
+        }
+        var job = batch?.Jobs.SingleOrDefault();
+        Check("watched folder: a new picture is converted",
+            job is { State: JobState.Succeeded } && Path.GetDirectoryName(job.OutputPath) == watched && job.OutputPath!.EndsWith(".jpg"),
+            job == null ? "nothing arrived" : $"{job.State}: {job.OutputPath ?? job.Error}");
+
+        await Task.Delay(3000);
+        Check("watched folder: its own result isn't converted again",
+            arrivals.Count == 1 && arrivals.Single().SequenceEqual(new[] { copied }),
+            string.Join("; ", arrivals.Select(a => string.Join(", ", a.Select(Path.GetFileName)))));
     }
 
     private static async Task<ConversionBatch> Run(ConversionQueue queue, IReadOnlyList<string> files, Operation operation)

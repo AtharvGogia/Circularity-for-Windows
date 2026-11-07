@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 
 namespace Circularity.Engine;
@@ -10,6 +11,28 @@ internal static class OutputPaths
     /// Set by the app whenever settings change.
     /// </summary>
     public static string? SaveTo { get; set; }
+
+    // Every file and folder results were written to since Circularity started, so a watched folder
+    // never picks up Circularity's own results and converts them again.
+    private static readonly ConcurrentDictionary<string, byte> Produced = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>True for a result Circularity wrote (or is writing), or anything inside a folder of results.</summary>
+    public static bool IsProduced(string path)
+    {
+        string full = Path.GetFullPath(path);
+        if (Produced.ContainsKey(full))
+            return true;
+        for (string? dir = Path.GetDirectoryName(full); dir != null; dir = Path.GetDirectoryName(dir))
+            if (Produced.ContainsKey(dir))
+                return true;
+        return false;
+    }
+
+    private static string Remember(string path)
+    {
+        Produced[Path.GetFullPath(path)] = 0;
+        return path;
+    }
 
     /// <summary>
     /// Picks "photo.png" (or "photo (resized).png" with a suffix), adding " (1)", " (2)"... if
@@ -28,12 +51,21 @@ internal static class OutputPaths
             string candidate = Path.Combine(dir, i == 0 ? $"{name}.{extension}" : $"{name} ({i}).{extension}");
             try
             {
+                // Remembered before it exists, so a watcher that sees it appear already knows it.
+                Remember(candidate);
                 new FileStream(candidate, FileMode.CreateNew).Dispose();
                 return candidate;
             }
             catch (IOException) when (File.Exists(candidate))
             {
-                // Taken; try the next number.
+                // Taken (by someone else's file); try the next number.
+                Produced.TryRemove(Path.GetFullPath(candidate), out _);
+            }
+            catch
+            {
+                // Not written (no permission, say): it isn't a result, so a watcher mustn't skip it.
+                Produced.TryRemove(Path.GetFullPath(candidate), out _);
+                throw;
             }
         }
     }
@@ -48,7 +80,16 @@ internal static class OutputPaths
             string candidate = Path.Combine(dir, i == 0 ? name : $"{name} ({i})");
             if (Directory.Exists(candidate) || File.Exists(candidate))
                 continue;
-            Directory.CreateDirectory(candidate);
+            Remember(candidate);
+            try
+            {
+                Directory.CreateDirectory(candidate);
+            }
+            catch
+            {
+                Produced.TryRemove(Path.GetFullPath(candidate), out _);
+                throw;
+            }
             return candidate;
         }
     }

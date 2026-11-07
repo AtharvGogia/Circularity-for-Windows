@@ -132,6 +132,11 @@
                             </DockPanel>
                             <TextBlock Text="If that folder isn't there when a file is converted (an unplugged drive, say), the file is saved next to the original instead." Opacity="0.7" Margin="0,6,0,0" TextWrapping="Wrap" />
 
+                            <TextBlock Text="Watched folders" FontSize="16" FontWeight="SemiBold" Margin="0,24,0,4" />
+                            <TextBlock Text="Every new file that lands in one of these folders is converted straight away, as if you'd dropped it on that button. Files already there are left alone." Opacity="0.7" Margin="0,0,0,8" TextWrapping="Wrap" />
+                            <StackPanel x:Name="WatchedFoldersPanel" />
+                            <Button Content="Add a folder…" Click="AddWatchedFolder_Click" HorizontalAlignment="Left" Margin="0,4,0,0" />
+
                             <TextBlock Text="After conversion" FontSize="16" FontWeight="SemiBold" Margin="0,24,0,8" />
                             <CheckBox x:Name="CopyClipboardCheck" Content="Copy converted file(s) to clipboard" />
                             <TextBlock Text="The file itself is copied (like Ctrl+C in File Explorer), so you can paste it directly into another folder or app." Opacity="0.7" Margin="18,4,0,0" TextWrapping="Wrap" />

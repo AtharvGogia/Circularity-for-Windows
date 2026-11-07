@@ -148,8 +148,21 @@ touched: the wheel always answers the drag with "Copy", never "Move".
 While something is running, hover the tray icon to see progress
 (`clip.mov → MP4 43% (+2 more)`). **Cancel conversions** in its menu stops everything. A cancelled or
 failed job leaves no half-written file behind. You get one notification per drop, with **Open** (the
-file, in its usual app) and **Open folder** buttons; clicking the notification itself shows the result
-in File Explorer.
+file, in its usual app), **Open folder** and **Undo** buttons; clicking the notification itself shows
+the result in File Explorer.
+
+Converted the wrong thing? **Undo last conversion** in the tray menu (or **Undo** on the
+notification) sends that conversion's results to the Recycle Bin, so they can still be restored from
+there. Only the most recent conversion can be undone, once. A result you've changed since (edited,
+say) is left alone, and the originals are never touched either way.
+
+**Watched folders** (Settings → Features) convert new files on their own: pick a folder and what
+to do, like **Convert to JPG** for a Screenshots folder, or one of your resize or compress buttons,
+and every new file that lands there gets it, as if you'd dropped it on that button. It waits until a
+file has finished arriving (a download or a copy can take a while), leaves partial downloads and
+files already there alone, and never converts its own results again, even when they're saved in the
+same folder. Files the action doesn't suit (a song in a "Convert to JPG" folder) are skipped.
+Subfolders count too if you tick **Subfolders**, and each folder can be paused.
 
 If something goes wrong that nothing else caught, Circularity keeps running, saves a crash report
 (`%LOCALAPPDATA%\Circularity\crashes`) and offers, in a notification, to report it. If the error is
@@ -179,7 +192,7 @@ Settings is live: hover and click it, and switch it between image, video, audio 
   **start at sign-in**: the same Windows sign-in entry the installer's checkbox creates, so the two
   always agree; it also notices (and, when ticked, undoes) "Disabled" in Task Manager's Startup apps
 - **Features**: where to **save converted files** (next to the original, or a folder you choose),
-  **copy converted files to the clipboard** when conversions finish (the files
+  **watched folders** (above), **copy converted files to the clipboard** when conversions finish (the files
   themselves, like Ctrl+C in File Explorer, so you can paste them into another folder or app), and
   **check for updates automatically**, on by default for new installs: when Circularity starts, or
   every day, 3 days, week or 30 days. A new version is mentioned once, in a notification that opens
@@ -264,7 +277,7 @@ and needs .NET 10 installed; the installer above is what to give other people.
 
 A tray icon appears with a "Circularity is running" notification. Right-click it for
 **Settings…**, **Check for updates…**, **Help**, **Pause gestures**, **Cancel conversions**,
-**Open log** and **Exit**.
+**Undo last conversion**, **Open log** and **Exit**.
 
 ## Test it
 
@@ -368,11 +381,13 @@ smooth out over time.
 | `Engine/WebPdfConverter.cs` | Markdown / HTML / TXT → PDF in a hidden WebView2; Markdown → HTML (Markdig). |
 | `Engine/OfficeConverter.cs` | Word / Excel / PowerPoint automation, with the hang and password safeguards. |
 | `Engine/Sta.cs` | Runs work on the single-threaded apartment thread WPF imaging and Office need. |
-| `Engine/OutputPaths.cs` | Picks a free output name (or folder) next to the original and reserves it. |
+| `Engine/OutputPaths.cs` | Picks a free output name (or folder) next to the original and reserves it, and remembers every result so watched folders skip them. |
+| `Engine/FolderWatcher.cs` | Watched folders: notices new files, waits until they've finished arriving, and batches them. |
+| `UndoLastConversion.cs` | "Undo last conversion": the last results, sent to the Recycle Bin unless they've changed since. |
 | `Theme.cs` | Light / dark / same-as-Windows, for the wheel and the windows. |
 | `InstanceChannel.cs` | One running copy; later launches hand their files over a private named pipe. |
 | `CrashGuard.cs` | The safety net: saves crash reports, keeps going where it can, restarts after a fatal error. |
-| `FinishedToast.cs` | The "Done" notification with Open and Open folder buttons. |
+| `FinishedToast.cs` | The "Done" notification with Open, Open folder and Undo buttons. |
 | `GlobalHotkey.cs` / `ExplorerSelection.cs` | Ctrl+Alt+C, and reading the selected files from Explorer or the desktop. |
 | `WelcomeWindow.xaml(.cs)` | The first-run welcome. |
 | `TutorialWindow.xaml(.cs)` | The full tutorial: chapters, a wheel to try, and a practice picture. |

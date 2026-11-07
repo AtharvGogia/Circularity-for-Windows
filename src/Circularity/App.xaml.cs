@@ -42,6 +42,9 @@ public partial class App : Application
     private ConversionQueue? _queue;
     private Forms.NotifyIcon? _tray;
     private Forms.ToolStripMenuItem? _cancelItem;
+    private Forms.ToolStripMenuItem? _undoItem;
+    private readonly UndoLastConversion _undo = new();
+    private FolderWatcher? _folderWatcher;
     private SettingsWindow? _settingsWindow;
     private UpdateWindow? _updateWindow;
     private WelcomeWindow? _welcomeWindow;
@@ -144,6 +147,10 @@ public partial class App : Application
         _queue = new ConversionQueue(new IConverter[] { new ImageConverter(_ffmpeg), _ffmpeg, new PdfConverter(), _webPdf, new OfficeConverter() });
         _queue.JobChanged += _ => Dispatcher.BeginInvoke(UpdateTrayStatus);
         _queue.BatchFinished += batch => Dispatcher.BeginInvoke(() => ReportBatch(batch));
+
+        // Started (and changed) by ApplySettings, from Settings > Features > Watched folders.
+        _folderWatcher = new FolderWatcher(OutputPaths.IsProduced);
+        _folderWatcher.FilesArrived += (folder, files) => Dispatcher.BeginInvoke(() => OnWatchedFilesArrived(folder, files));
 
         _wheel = new WheelWindow { CanHandle = _queue.CanHandle };
         _wheel.ActionChosen += OnActionChosen;
@@ -419,6 +426,7 @@ public partial class App : Application
         _shiftEnabled = settings.ShiftTrigger;
         _wheel?.ApplySettings(settings);
         Engine.OutputPaths.SaveTo = settings.OutputFolder;
+        _folderWatcher?.Update(settings.WatchedFolders);
         UpdateHotkey();
         UpdateTrayIcon();
     }
@@ -664,6 +672,30 @@ public partial class App : Application
             _dialogOpen = false;
             // The crop window holds the whole picture; let it go even if nothing was converted.
             ScheduleMemoryRelease();
+        }
+    }
+
+    /// <summary>New files in a watched folder: each one its action suits is converted, as if dropped on its button.</summary>
+    private void OnWatchedFilesArrived(WatchedFolder folder, IReadOnlyList<string> files)
+    {
+        // The folder may have been changed or removed in Settings since these were noticed.
+        if (!_settings.WatchedFolders.Contains(folder) || !folder.Enabled)
+            return;
+        var operation = folder.OperationFor(_settings);
+        if (operation == null)
+        {
+            Log.Write($"Watched folder {folder.Path}: its preset was deleted, so new files are left alone.");
+            return;
+        }
+        var preset = _settings.Presets.FirstOrDefault(p => WatchedFolder.PresetPrefix + p.Id == folder.Action);
+
+        var suited = files.Where(f => File.Exists(f) && Formats.Suits(f, operation, preset) && _queue!.CanHandle(f, operation)).ToList();
+        foreach (string skipped in files.Except(suited))
+            Log.Write($"Watched folder {folder.Path}: {operation.Describe()} doesn't apply to {Path.GetFileName(skipped)}, so it's left alone.");
+        if (suited.Count > 0)
+        {
+            Log.Write($"Watched folder {folder.Path}: {operation.Describe()} for {suited.Count} new file(s).");
+            _queue!.Enqueue(suited, operation);
         }
     }
 
@@ -962,6 +994,13 @@ public partial class App : Application
             });
         }
 
+        // The newest results are what "Undo last conversion" removes.
+        if (succeeded.Count > 0)
+        {
+            _undo.Remember(succeeded.Select(j => j.OutputPath!));
+            UpdateUndoItem();
+        }
+
         if (failed.Count > 0)
         {
             string title = failed.Count == jobs.Count ? "That didn't work" : $"{failed.Count} of {jobs.Count} files failed";
@@ -1005,7 +1044,7 @@ public partial class App : Application
 
             // With Open and Open folder buttons where Windows allows; otherwise the tray's own balloon.
             string first = succeeded[0].OutputPath!;
-            if (!FinishedToast.TryShow(title, body, first, single: succeeded.Count == 1))
+            if (!FinishedToast.TryShow(title, body, first, single: succeeded.Count == 1, canUndo: _undo.Contains(first)))
                 Notify(title, body + "\nClick to show.", Forms.ToolTipIcon.Info, openOnClick: first);
         }
         else
@@ -1085,6 +1124,9 @@ public partial class App : Application
         };
         menu.Items.Add(_cancelItem);
 
+        _undoItem = new Forms.ToolStripMenuItem("Undo last conversion", null, (_, _) => UndoLast()) { Enabled = false };
+        menu.Items.Add(_undoItem);
+
         menu.Items.Add("Open log", null, (_, _) =>
             Process.Start(new ProcessStartInfo(Log.FilePath) { UseShellExecute = true }));
         menu.Items.Add(new Forms.ToolStripSeparator());
@@ -1125,9 +1167,52 @@ public partial class App : Application
         ShowInExplorer(target);
     }
 
+    /// <summary>Sends the last conversion's results to the Recycle Bin, and says what happened.</summary>
+    private void UndoLast()
+    {
+        if (_undo.Count == 0)
+        {
+            Notify("Nothing to undo", "Only the most recent conversion can be undone, once.", Forms.ToolTipIcon.Info);
+            return;
+        }
+        var outcome = _undo.Undo();
+        UpdateUndoItem();
+        Log.Write($"Undo: {outcome.Removed} moved to the Recycle Bin, {outcome.Changed} left alone, {outcome.Gone} already gone.");
+        Notify(outcome.Removed > 0 ? "Undone" : "Nothing was undone", DescribeUndo(outcome), Forms.ToolTipIcon.Info);
+    }
+
+    internal static string DescribeUndo(UndoOutcome outcome)
+    {
+        static string Files(int n) => n == 1 ? "1 file" : $"{n} files";
+        var parts = new List<string>();
+        if (outcome.Removed > 0)
+            parts.Add($"Moved {Files(outcome.Removed)} to the Recycle Bin.");
+        if (outcome.Changed > 0)
+            parts.Add($"{Files(outcome.Changed)} had been changed since, so {(outcome.Changed == 1 ? "it was" : "they were")} left alone.");
+        if (outcome.Gone > 0)
+            parts.Add($"{Files(outcome.Gone)} had already been moved or deleted.");
+        return string.Join(" ", parts);
+    }
+
+    private void UpdateUndoItem()
+    {
+        if (_undoItem == null)
+            return;
+        _undoItem.Enabled = _undo.Count > 0;
+        _undoItem.Text = _undo.Count > 1 ? $"Undo last conversion ({_undo.Count} files)" : "Undo last conversion";
+    }
+
     /// <summary>A button on the "Done" notification (or the notification itself) was clicked.</summary>
     private void OnFinishedToastAction(string action, string path)
     {
+        if (action == FinishedToast.Undo)
+        {
+            if (_undo.Contains(path))
+                UndoLast();
+            else
+                Notify("That can't be undone any more", "Only the most recent conversion can be undone, once.", Forms.ToolTipIcon.Info);
+            return;
+        }
         if (action == FinishedToast.Open && File.Exists(path))
         {
             try
@@ -1167,6 +1252,7 @@ public partial class App : Application
         _hotkey?.Dispose();
         _channel?.Dispose();
         // Cancels running conversions; FFmpeg processes are killed and partial files deleted.
+        _folderWatcher?.Dispose();
         _queue?.Dispose();
         _webPdf?.Dispose();
         Microsoft.Win32.SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;

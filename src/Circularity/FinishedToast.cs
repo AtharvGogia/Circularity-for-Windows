@@ -6,14 +6,15 @@ namespace Circularity;
 
 /// <summary>
 /// The "Done" notification as a real Windows notification, with buttons: Open (the file, in its
-/// usual app) and Open folder (showing it selected in File Explorer, as clicking the notification
-/// does). The tray's balloon notifications can't have buttons. The toolkit registers Circularity with
+/// usual app), Open folder (showing it selected in File Explorer, as clicking the notification
+/// does) and Undo (the results go to the Recycle Bin). The tray's balloon notifications can't have buttons. The toolkit registers Circularity with
 /// Windows for this under HKCU; <see cref="Unregister"/> takes that out again on uninstall.
 /// </summary>
 internal static class FinishedToast
 {
     public const string Open = "open";
     public const string OpenFolder = "folder";
+    public const string Undo = "undo";
 
     private const string ActionKey = "action";
     private const string PathKey = "path";
@@ -47,7 +48,8 @@ internal static class FinishedToast
     /// </summary>
     /// <param name="path">The result (the first one, for several); a folder for PDF pages.</param>
     /// <param name="single">One file, so it can be opened; several only get Open folder.</param>
-    public static bool TryShow(string title, string body, string path, bool single)
+    /// <param name="canUndo">Adds Undo, which sends the results to the Recycle Bin.</param>
+    public static bool TryShow(string title, string body, string path, bool single, bool canUndo = false)
     {
         try
         {
@@ -60,6 +62,8 @@ internal static class FinishedToast
             if (single && File.Exists(path))
                 builder.AddButton(Button("Open", Open, path));
             builder.AddButton(Button("Open folder", OpenFolder, path));
+            if (canUndo)
+                builder.AddButton(Button("Undo", Undo, path));
             builder.Show();
             return true;
         }
