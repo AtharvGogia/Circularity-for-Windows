@@ -161,7 +161,8 @@ internal sealed class FolderWatcher : IDisposable
                 _watcher = new FileSystemWatcher(Folder.Path)
                 {
                     IncludeSubdirectories = Folder.IncludeSubfolders,
-                    NotifyFilter = NotifyFilters.FileName,
+                    // Folders too, so a folder moved in with subfolders on is noticed (see Noticed).
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
                     // Room for a big copy's worth of names before Windows drops events.
                     InternalBufferSize = 64 * 1024,
                 };
@@ -183,6 +184,21 @@ internal sealed class FolderWatcher : IDisposable
 
         private void Noticed(string path)
         {
+            // A whole folder moved or copied in: Windows only reports the folder, so its files are
+            // looked at one by one (with subfolders on; otherwise they aren't watched anyway).
+            if (Folder.IncludeSubfolders && Directory.Exists(path))
+            {
+                try
+                {
+                    foreach (string file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+                        Noticed(file);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Log.Write($"Watched folder: couldn't look inside {path}: {ex.Message}");
+                }
+                return;
+            }
             if (!_owner.IsCandidate(path))
                 return;
             lock (_arriving)
@@ -201,7 +217,12 @@ internal sealed class FolderWatcher : IDisposable
                 {
                     lock (_batch)
                     {
-                        _batch.Add(path);
+                        // Stopped meanwhile (the folder was changed or removed): nothing more to do.
+                        if (_stop.IsCancellationRequested)
+                            return;
+                        // An app that saves by replacing the file can report it twice within a batch.
+                        if (!_batch.Contains(path, StringComparer.OrdinalIgnoreCase))
+                            _batch.Add(path);
                         _batchTimer ??= new Timer(_ => ReportBatch());
                         _batchTimer.Change(_owner._batchDelay, Timeout.InfiniteTimeSpan);
                     }
@@ -231,7 +252,8 @@ internal sealed class FolderWatcher : IDisposable
                 files = _batch.ToList();
                 _batch.Clear();
             }
-            _owner.FilesArrived?.Invoke(Folder, files);
+            if (!_stop.IsCancellationRequested)
+                _owner.FilesArrived?.Invoke(Folder, files);
         }
 
         public void Dispose()
@@ -241,6 +263,7 @@ internal sealed class FolderWatcher : IDisposable
             lock (_batch)
             {
                 _batchTimer?.Dispose();
+                _batchTimer = null;
                 _batch.Clear();
             }
         }

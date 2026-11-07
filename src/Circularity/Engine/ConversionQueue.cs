@@ -205,6 +205,7 @@ internal sealed class ConversionQueue : IDisposable
         try
         {
             File.Delete(path);
+            OutputPaths.Forget(path);
         }
         catch (IOException)
         {

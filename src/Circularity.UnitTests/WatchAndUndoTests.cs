@@ -122,6 +122,26 @@ public class UndoLastConversionTests
     }
 
     [Fact]
+    public void Undo_LeavesAFolderOfPagesAlone_WhenAPageChanged()
+    {
+        using var temp = new TempFolder();
+        string pages = Path.Combine(temp.Path, "report (pages)");
+        Directory.CreateDirectory(pages);
+        string page = Path.Combine(pages, "1.png");
+        File.WriteAllText(page, "page");
+        var time = File.GetLastWriteTimeUtc(page);
+        var undo = WithFakeBin(new List<string>());
+
+        undo.Remember(new[] { pages });
+        // Same number of files and the same time, but different content (and so size).
+        File.WriteAllText(page, "edited page");
+        File.SetLastWriteTimeUtc(page, time);
+
+        Assert.Equal(new UndoOutcome(0, 1, 0), undo.Undo());
+        Assert.True(Directory.Exists(pages));
+    }
+
+    [Fact]
     public void DescribeUndo_SaysWhatHappened()
     {
         Assert.Equal("Moved 2 files to the Recycle Bin.", App.DescribeUndo(new UndoOutcome(2, 0, 0)));
@@ -217,6 +237,15 @@ public class OwnResultsTests
         Assert.True(OutputPaths.IsProduced(Path.Combine(pages, "photo 1.png")));
         Assert.False(OutputPaths.IsProduced(original));
         Assert.False(OutputPaths.IsProduced(Path.Combine(temp.Path, "someone else.jpg")));
+    }
+
+    [Fact]
+    public void AForgottenResult_IsNoLongerOwn()
+    {
+        using var temp = new TempFolder();
+        string result = OutputPaths.Reserve(temp.File("photo.heic"), "jpg");
+        OutputPaths.Forget(result);
+        Assert.False(OutputPaths.IsProduced(result));
     }
 
     [Fact]
@@ -336,6 +365,29 @@ public class FolderWatcherTests
         temp.File("paused.jpg");
         await Task.Delay(800);
         Assert.Equal(2, arrived.Count);
+    }
+
+    [Fact]
+    public async Task AFolderMovedIn_HasItsFilesPickedUp_WithSubfoldersOn()
+    {
+        using var temp = new TempFolder();
+        using var elsewhere = new TempFolder();
+        string trip = Path.Combine(elsewhere.Path, "trip");
+        Directory.CreateDirectory(trip);
+        File.WriteAllText(Path.Combine(trip, "beach.jpg"), "x");
+        File.WriteAllText(Path.Combine(trip, "notes.xyz"), "not a known type");
+        var arrived = new ConcurrentQueue<string>();
+        using var watcher = Fast();
+        watcher.FilesArrived += (_, files) => { foreach (var f in files) arrived.Enqueue(f); };
+        watcher.Update(new[] { new WatchedFolder("w", temp.Path, "png", IncludeSubfolders: true) });
+
+        string moved = Path.Combine(temp.Path, "trip");
+        Directory.Move(trip, moved);
+
+        string beach = Path.Combine(moved, "beach.jpg");
+        await WaitFor(() => arrived.Contains(beach));
+        await Task.Delay(500);
+        Assert.Equal(new[] { beach }, arrived.ToArray());
     }
 
     private static async Task WaitFor(Func<bool> condition)

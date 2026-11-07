@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
@@ -46,7 +47,11 @@ internal static class ReadmeMedia
         var thread = new Thread(() =>
         {
             WindowHelpers.SuppressForeground = true;
-            foreach (var (name, scene) in new (string, Func<Stage, double>)[] { ("drag", DragScene), ("keyboard", KeyboardScene), ("appearance", AppearanceScene) })
+            foreach (var (name, scene) in new (string, Func<Stage, double>)[]
+            {
+                ("drag", DragScene), ("keyboard", KeyboardScene), ("appearance", AppearanceScene),
+                ("two-arcs", TwoArcsScene), ("watched-folder", WatchedFolderScene), ("undo", UndoScene),
+            })
             {
                 string frames = Path.Combine(Path.GetTempPath(), "circularity-frames-" + name);
                 if (Directory.Exists(frames))
@@ -140,7 +145,7 @@ internal static class ReadmeMedia
         if (t >= DropAt + 0.4 && s.Once("saved"))
             s.AddFile("holiday.gif");
         if (t >= DropAt + 0.5 && s.Once("toast"))
-            s.Toast("holiday.gif is ready", "Converted holiday.jpg to GIF. Select to show it in File Explorer.");
+            s.Toast("Done", "holiday.gif", "Open", "Open folder", "Undo");
         return DropAt + 2.6;
     }
 
@@ -183,8 +188,161 @@ internal static class ReadmeMedia
         if (t >= 5.1 && s.Once("saved"))
             s.AddFile("report.txt");
         if (t >= 5.2 && s.Once("toast"))
-            s.Toast("report.txt is ready", "Converted report.pdf to TXT. Select to show it in File Explorer.");
+            s.Toast("Done", "report.txt", "Open", "Open folder", "Undo");
         return 7.4;
+    }
+
+    /// <summary>
+    /// With a few saved buttons, More opens two arcs: drag across the first (the middle naming each
+    /// button), out onto the second, and drop on a saved resize.
+    /// </summary>
+    private static double TwoArcsScene(Stage s)
+    {
+        double t = s.Time;
+        var wheelAt = new Point(735, 225);
+        const double DropAt = 6.2;
+        if (s.Once("setup"))
+        {
+            s.Desktop(AppTheme.Dark);
+            s.Explorer("Pictures", new[] { "holiday.jpg", "notes.md", "clip.mp4", "report.pdf" });
+            s.UseSettings(new Settings
+            {
+                Presets =
+                {
+                    new Preset("p1", "Insta 1080", Resize: new ResizeSpec(ResizeKind.Fit, 1080, 1080)),
+                    new Preset("p2", "Email", Compress: new CompressSpec(Quality: 60), Kind: "Image"),
+                    new Preset("p3", "Thumb", Resize: new ResizeSpec(ResizeKind.Fit, 320, 320)),
+                    new Preset("p4", "Under 1 MB", Compress: new CompressSpec(Quality: 70), Kind: "Image"),
+                },
+            });
+            s.WheelFor("holiday.jpg");
+        }
+
+        var tile = s.TileCenter(0);
+        var more = s.TargetPoint(wheelAt, WheelView.MoreIndex);
+        var path = new (double At, Point P)[]
+        {
+            (0.0, new Point(520, 470)),
+            (0.8, tile),
+            (1.0, tile),
+            (2.0, wheelAt),
+            (2.8, more),                                                    // rest on More: two arcs open
+            (3.6, s.TargetPoint(wheelAt, s.IndexOfTarget("avif"))),         // along the first arc
+            (4.3, s.TargetPoint(wheelAt, s.IndexOfTarget("heic"))),
+            (5.1, s.TargetPoint(wheelAt, s.IndexOfLabel("Under 1 MB"))),    // out onto the second
+            (DropAt, s.TargetPoint(wheelAt, s.IndexOfLabel("Thumb"))),
+        };
+        var cursor = Along(path, t);
+        s.Cursor(cursor);
+
+        if (t >= 0.8 && s.Once("press"))
+            s.Select(0);
+        if (t >= 1.05 && t < DropAt)
+            s.DragGhost(cursor, "holiday.jpg");
+        if (t >= 2.0 && s.Once("rightclick"))
+        {
+            s.Ripple(wheelAt);
+            s.Keys("Right-click");
+            s.ShowWheel(wheelAt);
+        }
+        if (t >= 2.1 && t < DropAt)
+        {
+            s.HoverAt(cursor);
+            s.DropLabel(s.LabelFor(s.HotTarget));
+        }
+        if (t >= DropAt && s.Once("drop"))
+        {
+            s.HideDragGhost();
+            s.HideWheel();
+        }
+        if (t >= DropAt + 0.4 && s.Once("saved"))
+            s.AddFile("holiday (resized).jpg");
+        if (t >= DropAt + 0.5 && s.Once("toast"))
+            s.Toast("Done", "holiday (resized).jpg", "Open", "Open folder", "Undo");
+        return DropAt + 2.6;
+    }
+
+    /// <summary>A watched folder: a new screenshot lands in it, and a JPG of it turns up by itself.</summary>
+    private static double WatchedFolderScene(Stage s)
+    {
+        double t = s.Time;
+        if (s.Once("setup"))
+        {
+            s.Desktop(AppTheme.Dark);
+            s.Explorer("Screenshots", new[] { "Screenshot 0931.jpg", "Screenshot 1012.jpg" });
+            s.Cursor(new Point(-50, -50));
+        }
+        if (t >= 0.2 && s.Once("caption"))
+            s.Caption("Watched folder: Screenshots → Convert to JPG", 2.6);
+        if (t >= 1.4 && s.Once("keys"))
+            s.Keys("Win", "Shift", "S");
+        if (t >= 2.3 && s.Once("screenshot"))
+            s.AddFile("Screenshot 1047.png");
+        if (t >= 3.6 && s.Once("converted"))
+            s.AddFile("Screenshot 1047.jpg");
+        if (t >= 3.7 && s.Once("toast"))
+            s.Toast("Done", "Screenshot 1047.jpg", "Open", "Open folder", "Undo");
+        return 6.4;
+    }
+
+    private static Point _undoButton;
+
+    /// <summary>Convert by mistake, then Undo on the notification: the new file goes to the Recycle Bin.</summary>
+    private static double UndoScene(Stage s)
+    {
+        double t = s.Time;
+        const double ToastAt = 3.3, ClickAt = 4.9;
+        if (s.Once("setup"))
+        {
+            s.Desktop(AppTheme.Dark);
+            s.Explorer("Pictures", new[] { "holiday.jpg", "notes.md", "clip.mp4" });
+            s.WheelFor("holiday.jpg");
+        }
+        var tile = s.TileCenter(0);
+        var rest = tile + new Vector(140, 60);
+        if (t < 1.6)
+            s.Cursor(Along(new (double, Point)[] { (0.0, new Point(600, 470)), (0.6, tile), (1.0, tile), (1.5, rest) }, t));
+        else if (t < ToastAt + 0.8)
+            s.Cursor(rest);
+        else
+        {
+            // Where Undo is, taken while its notification is up (the next one has no buttons).
+            if (t < ClickAt + 0.2)
+                _undoButton = s.ToastButton("Undo");
+            s.Cursor(Lerp(rest, _undoButton, Ease((t - ToastAt - 0.8) / (ClickAt - ToastAt - 0.8))));
+        }
+
+        if (t >= 0.65 && s.Once("select"))
+            s.Select(0);
+        if (t >= 1.3 && s.Once("keys"))
+            s.Keys("Ctrl", "Alt", "C");
+        if (t >= 1.8 && s.Once("open"))
+        {
+            s.ShowWheel(rest);
+            s.HoverIndex(0);
+        }
+        if (t >= 2.6 && s.Once("enter"))
+        {
+            s.Keys("Enter");
+            s.HideWheel();
+        }
+        if (t >= 3.0 && s.Once("saved"))
+            s.AddFile("holiday.png");
+        if (t >= ToastAt && s.Once("toast"))
+            s.Toast("Done", "holiday.png", "Open", "Open folder", "Undo");
+        if (t >= ClickAt && s.Once("undo"))
+        {
+            s.Ripple(_undoButton);
+            s.PressToastButton("Undo");
+        }
+        if (t >= ClickAt + 0.3 && s.Once("removed"))
+        {
+            s.HideToast();
+            s.RemoveFile(3);
+        }
+        if (t >= ClickAt + 0.7 && s.Once("undone"))
+            s.Toast("Undone", "Moved 1 file to the Recycle Bin.");
+        return ClickAt + 2.8;
     }
 
     /// <summary>The wheel in different accent colours, with the desktop following light and dark mode.</summary>
@@ -267,6 +425,7 @@ internal static class ReadmeMedia
         private Border? _dropLabel;
         private TextBlock? _dropText;
         private Border? _toast;
+        private readonly Dictionary<string, Border> _toastButtons = new();
         private Rectangle? _wallpaper, _wallpaperNext;
         private Border? _taskbar;
         private Image? _trayIcon;
@@ -761,6 +920,15 @@ internal static class ReadmeMedia
                 _status.Text = $"{_tiles.Count} items";
         }
 
+        /// <summary>A file going to the Recycle Bin: it fades out of the folder, and the item count goes down.</summary>
+        public void RemoveFile(int index)
+        {
+            var tile = _tiles[index].Tile;
+            tile.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(300)));
+            if (_status != null)
+                _status.Text = $"{_tiles.Count(t => t.Tile.Opacity > 0 && t.Tile != tile)} items";
+        }
+
         public Point TileCenter(int index) => _tiles[index].Center;
 
         /// <summary>Explorer's selection: a light blue fill and edge.</summary>
@@ -777,9 +945,19 @@ internal static class ReadmeMedia
 
         // --- The wheel ---
 
+        /// <summary>Settings for the wheel from now on, such as saved buttons; theme and accent stay the stage's.</summary>
+        public void UseSettings(Settings settings)
+        {
+            settings.Theme = _settings.Theme;
+            settings.AccentColor = _settings.AccentColor;
+            _settings = settings;
+            _wheel.ApplySettings(_settings);
+        }
+
         public void WheelFor(string file)
         {
-            var (_, actions) = Formats.ActionsFor(new[] { file }, (_, _) => true);
+            // With the stage's settings, so the buttons are the ones a new install shows (BMP and TIFF hidden).
+            var (_, actions) = Formats.ActionsFor(new[] { file }, (_, _) => true, _settings);
             // The demo files aren't real, so they get typical sizes for the wheel's centre.
             string size = Formats.KindOf(file) switch { FileKind.Image => "3.4 MB", FileKind.Video => "48 MB", _ => "1.2 MB" };
             _wheel.SetActions(actions, file, size);
@@ -813,6 +991,30 @@ internal static class ReadmeMedia
         }
 
         public int IndexOfTarget(string target) => _wheel.IndexOfTarget(target);
+
+        /// <summary>The button with this label (a saved one, say), or -1.</summary>
+        public int IndexOfLabel(string label) => _wheel.Actions.ToList().FindIndex(a => a.Label == label);
+
+        /// <summary>A caption at the top of the picture, saying what's set up, fading after a few seconds.</summary>
+        public void Caption(string text, double seconds = 3)
+        {
+            var pill = new Border
+            {
+                Padding = new Thickness(16, 8, 16, 8),
+                CornerRadius = new CornerRadius(18),
+                Background = Brush(0xEE2A2A30),
+                BorderBrush = Brush(0x40FFFFFF),
+                BorderThickness = new Thickness(1),
+                Effect = new DropShadowEffect { BlurRadius = 12, ShadowDepth = 3, Opacity = 0.4 },
+                Child = new TextBlock { Text = text, FontFamily = Ui, Foreground = Brushes.White, FontSize = 15, FontWeight = FontWeights.SemiBold },
+            };
+            pill.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            Canvas.SetLeft(pill, (ReadmeMedia.Width - pill.DesiredSize.Width) / 2);
+            Canvas.SetTop(pill, 20);
+            _overlay.Children.Add(pill);
+            pill.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150)));
+            pill.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(300)) { BeginTime = TimeSpan.FromSeconds(seconds) });
+        }
 
         public int HotTarget => _wheel.HotIndex;
 
@@ -871,6 +1073,12 @@ internal static class ReadmeMedia
         {
             Canvas.SetLeft(_cursor, p.X);
             Canvas.SetTop(_cursor, p.Y);
+            // Always over everything else, notifications and captions included.
+            if (_overlay.Children.IndexOf(_cursor) is var at and >= 0 && at != _overlay.Children.Count - 1)
+            {
+                _overlay.Children.Remove(_cursor);
+                _overlay.Children.Add(_cursor);
+            }
         }
 
         /// <summary>The see-through thumbnail Windows draws under the cursor while dragging a file.</summary>
@@ -997,9 +1205,26 @@ internal static class ReadmeMedia
             row.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(250)) { BeginTime = TimeSpan.FromSeconds(0.75) });
         }
 
-        /// <summary>A Windows 11 notification from Circularity, sliding in above the clock.</summary>
-        public void Toast(string title, string body)
+        /// <summary>A Windows 11 notification from Circularity, sliding in above the clock, with buttons along its foot if any.</summary>
+        public void Toast(string title, string body, params string[] buttons)
         {
+            _toastButtons.Clear();
+            var row = new UniformGrid { Rows = 1, Margin = new Thickness(0, 12, 0, 0) };
+            foreach (string label in buttons)
+            {
+                var button = new Border
+                {
+                    Height = 32,
+                    Margin = new Thickness(label == buttons[0] ? 0 : 4, 0, label == buttons[^1] ? 0 : 4, 0),
+                    CornerRadius = new CornerRadius(4),
+                    Background = Brush(0xFF3A3A3A),
+                    BorderBrush = Brush(0x20FFFFFF),
+                    BorderThickness = new Thickness(1),
+                    Child = new TextBlock { Text = label, FontFamily = Ui, FontSize = 12.5, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+                };
+                _toastButtons[label] = button;
+                row.Children.Add(button);
+            }
             _toast = new Border
             {
                 Width = 360,
@@ -1024,6 +1249,7 @@ internal static class ReadmeMedia
                         },
                         WithMargin(Text(title, 14, 0xFFFFFFFF, FontWeights.SemiBold), new Thickness(0, 12, 0, 0)),
                         WithMargin(new TextBlock { Text = body, FontFamily = Ui, FontSize = 12.5, Foreground = Brush(0xC8FFFFFF), TextWrapping = TextWrapping.Wrap }, new Thickness(0, 4, 0, 0)),
+                        row,
                     },
                 },
                 RenderTransform = new TranslateTransform(380, 0),
@@ -1035,6 +1261,21 @@ internal static class ReadmeMedia
             ((TranslateTransform)_toast.RenderTransform).BeginAnimation(TranslateTransform.XProperty,
                 new DoubleAnimation(0, TimeSpan.FromMilliseconds(420)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
         }
+
+        /// <summary>The middle of a notification button on screen, once the notification has slid in.</summary>
+        public Point ToastButton(string label)
+        {
+            var button = _toastButtons[label];
+            return button.TransformToAncestor(_overlay).Transform(new Point(button.ActualWidth / 2, button.ActualHeight / 2));
+        }
+
+        /// <summary>A button being pressed: a little darker for a moment.</summary>
+        public void PressToastButton(string label) =>
+            _toastButtons[label].Background.BeginAnimation(SolidColorBrush.ColorProperty,
+                new ColorAnimation(Color.FromRgb(0x55, 0x55, 0x55), TimeSpan.FromMilliseconds(90)) { AutoReverse = true });
+
+        public void HideToast() =>
+            _toast?.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(250)));
 
         private void Place(UIElement element, double x, double y)
         {

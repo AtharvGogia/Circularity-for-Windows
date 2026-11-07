@@ -28,6 +28,12 @@ internal static class OutputPaths
         return false;
     }
 
+    /// <summary>
+    /// Forgets a result that's gone (undone, or deleted after a failed conversion), so a new file with
+    /// the same name in a watched folder isn't mistaken for it.
+    /// </summary>
+    public static void Forget(string path) => Produced.TryRemove(Path.GetFullPath(path), out _);
+
     private static string Remember(string path)
     {
         Produced[Path.GetFullPath(path)] = 0;

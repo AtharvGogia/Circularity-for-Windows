@@ -49,7 +49,11 @@ internal sealed class UndoLastConversion
             else if (now != result)
                 changed++;
             else if (_recycle(result.Path))
+            {
                 removed++;
+                // Gone: a new file with this name in a watched folder is someone else's, not a result.
+                Engine.OutputPaths.Forget(result.Path);
+            }
             else
                 changed++;
         }
@@ -59,7 +63,7 @@ internal sealed class UndoLastConversion
 
     public void Forget() => _results = new();
 
-    /// <summary>A file's size and time, or a folder's file count and time (PDF pages); null if it isn't there.</summary>
+    /// <summary>A file's size and time, or a folder's file count, total size and newest time (PDF pages); null if it isn't there.</summary>
     private static Result? Snapshot(string path)
     {
         try
@@ -72,7 +76,8 @@ internal sealed class UndoLastConversion
             if (Directory.Exists(path))
             {
                 var files = new DirectoryInfo(path).GetFiles("*", System.IO.SearchOption.AllDirectories);
-                return new Result(path, files.Length, files.Select(f => f.LastWriteTimeUtc).DefaultIfEmpty().Max());
+                // How many files, how big in all and when last written: any page added, removed or edited changes one.
+                return new Result(path, files.Sum(f => f.Length), files.Select(f => f.LastWriteTimeUtc).DefaultIfEmpty().Max(), files.Length);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -98,7 +103,7 @@ internal sealed class UndoLastConversion
         }
     }
 
-    private sealed record Result(string Path, long Size, DateTime Written);
+    private sealed record Result(string Path, long Size, DateTime Written, int Files = 1);
 }
 
 /// <param name="Removed">Moved to the Recycle Bin.</param>

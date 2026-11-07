@@ -69,9 +69,12 @@ A tray app that:
    on the right; buttons that open a dialog first (Resize, Compress, Crop) always sit to the left of
    More, on the ring or at the left end of the arc. The arc holds five; past that, a second, wider
    arc opens around it for up to six more. That's the most the wheel shows: 16 buttons in all, and
-   Settings → Buttons says which ones don't fit. Near the bottom of the screen, where the arc wouldn't fit, More moves to the top and the
-   arc opens upwards instead. Whichever button you're on, the middle of the wheel says what it does
-   in full ("Convert to WEBP", "Crop…"), so a long name shortened on its button is never a guess.
+   Settings → Buttons says which ones don't fit. Near the bottom of the screen, where the arc
+   wouldn't fit, More moves to the top and the arc opens upwards instead. Whichever button you're
+   on, the middle of the wheel says what it does in full ("Convert to WEBP", "Crop…"), so a long
+   name shortened on its button is never a guess.
+
+   ![With four saved buttons, More opens two arcs; the drag crosses the first and drops on Thumb in the second](docs/media/two-arcs.gif)
 
    By default the wheel **adapts to how you use it**: the buttons you use most move to the front,
    onto the ring. Turn it off in Settings → Buttons, or set your own order there, which then stays
@@ -163,13 +166,17 @@ notification) sends that conversion's results to the Recycle Bin, so they can st
 there. Only the most recent conversion can be undone, once. A result you've changed since (edited,
 say) is left alone, and the originals are never touched either way.
 
+![Converting holiday.jpg to PNG by mistake, then Undo on the notification: the PNG goes to the Recycle Bin](docs/media/undo.gif)
+
 **Watched folders** (Settings → Features) convert new files on their own: pick a folder and what
 to do, like **Convert to JPG** for a Screenshots folder, or one of your resize or compress buttons,
 and every new file that lands there gets it, as if you'd dropped it on that button. It waits until a
 file has finished arriving (a download or a copy can take a while), leaves partial downloads and
 files already there alone, and never converts its own results again, even when they're saved in the
 same folder. Files the action doesn't suit (a song in a "Convert to JPG" folder) are skipped.
-Subfolders count too if you tick **Subfolders**, and each folder can be paused.
+Subfolders count too if you tick **Subfolders too**, and each folder can be paused.
+
+![A watched Screenshots folder: a new screenshot lands as a PNG, and a JPG of it turns up by itself](docs/media/watched-folder.gif)
 
 If something goes wrong that nothing else caught, Circularity keeps running, saves a crash report
 (`%LOCALAPPDATA%\Circularity\crashes`) and offers, in a notification, to report it. If the error is
@@ -177,7 +184,7 @@ one that ends the program, it starts itself again (unless it had only just start
 can't loop) and offers the report then.
 
 The first time Circularity starts, a short welcome explains the gestures. For everything else there's
-a **tutorial** built in: thirteen chapters, from opening the wheel to every format and tool, your own
+a **tutorial** built in: fourteen chapters, from opening the wheel to every format and tool, your own
 buttons, settings and troubleshooting, with a wheel to try and a practice picture to drag. Both are in
 the tray icon's menu under **Help** and in Settings → **Help**.
 

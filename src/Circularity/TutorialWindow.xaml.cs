@@ -53,6 +53,7 @@ internal partial class TutorialWindow : Window
             new("Trim and combine", TrimAndCombine),
             new("Your own buttons", OwnButtons),
             new("After converting", AfterConverting),
+            new("Watched folders", WatchedFolders),
             new("Settings and the tray", SettingsAndTray),
             new("If something isn't working", Troubleshooting),
         };
@@ -133,13 +134,13 @@ internal partial class TutorialWindow : Window
         Heading("Practice"),
         Para("Make a picture to practise on. It's saved in a folder of its own, and File Explorer opens with it selected, ready to drag."),
         PracticeButton(),
-        Tip("The wheel didn't appear?", "It only opens for drags from the apps above, not while something is running full screen (a game or video), and not when gestures are paused from the tray menu. Chapter 13 has more."));
+        Tip("The wheel didn't appear?", "It only opens for drags from the apps above, not while something is running full screen (a game or video), and not when gestures are paused from the tray menu. Chapter 14 has more."));
 
     private FrameworkElement Dropping() => Page("Drop on a button",
         Para("Once the wheel is open, it works like any other place you can drop a file: move onto a button and let go."),
         Bullets(
             "**A button** converts the file, or opens a small window first for tools like Resize, Crop, Compress and Trim.",
-            "**The middle** cancels. While you're over it, it says Cancel; when you're not, it shows the file's name and size.",
+            "**The middle** cancels. While you're over it, it says Cancel. While you're on a button, it says in full what that button does (**Convert to WEBP**, **Crop…**); otherwise it shows the file's name and size.",
             "**Dragging off the wheel** closes it, and the drag carries on as normal, so you can still drop the file somewhere else."),
         Para("As you move over the buttons, the label under the dragged file says what letting go will do, for example **Convert to PNG** or **Cancel**. (Windows draws that label for drags from File Explorer and the desktop.)"),
         Heading("Your original is safe"),
@@ -154,10 +155,12 @@ internal partial class TutorialWindow : Window
         Bullets(
             "The ring holds **at most six buttons**, so each one stays big enough to hit without looking.",
             "When a file has more to offer, the bottom button becomes **More**. Resting on it fans the rest out in an arc just outside the wheel, which you drop onto the same way.",
+            "The arc holds **five**. Past that, a second, wider arc opens around it for up to **six** more. That's the most the wheel shows: 16 buttons in all.",
             "Everyday formats sit at the **top and on the right**. Buttons that open a window first (Resize, Compress, Crop, Trim) always sit to the **left of More**, on the ring or at the left end of the arc.",
             "Near the bottom of the screen, where the arc wouldn't fit, More moves to the **top** and the arc opens upwards.",
+            "By default the wheel **adapts to how you use it**: the buttons you use most move to the front, onto the ring.",
             "The buttons depend on the file: try Video, Audio and Document above."),
-        Tip("Change the order", "Settings → Buttons lets you move buttons up (onto the ring) or down (behind More), and hide ones you never use. Chapter 10 has the details."));
+        Tip("Change the order", "Settings → Buttons lets you move buttons up (onto the ring) or down (behind More), hide ones you never use, or turn off adapting. Chapter 10 has the details."));
 
     private FrameworkElement WithoutDragging() => Page("Without dragging",
         Para("You don't have to drag. These open the same wheel at the cursor, in **click mode**:"),
@@ -178,7 +181,7 @@ internal partial class TutorialWindow : Window
     private FrameworkElement Formats_() => Page("What it converts",
         Para("The wheel only shows what makes sense for the file you're dropping. Here's everything it can do."),
         Heading("Images"),
-        Para("To **PNG, JPG, BMP, GIF, TIFF, WebP, AVIF** and **PDF**, and to **HEIC** on PCs with Microsoft's HEVC extension (many have it already; without it, there's no HEIC button). It reads **iPhone HEIC/HEIF photos, AVIF** and **SVG** on every PC, even without that extension. Photos taken sideways come out the right way up. SVGs keep their transparency; small ones (icons) come out at 1024 px rather than their tiny nominal size, and anything an SVG links to outside itself is ignored, so converting one never goes online."),
+        Para("To **PNG, JPG, GIF, WebP, AVIF** and **PDF**, to **BMP** and **TIFF** once you turn them on in Settings → Buttons (they're hidden at first, since few people need them), and to **HEIC** on PCs with Microsoft's HEVC extension (many have it already; without it, there's no HEIC button). It reads **iPhone HEIC/HEIF photos, AVIF** and **SVG** on every PC, even without that extension. Photos taken sideways come out the right way up. SVGs keep their transparency; small ones (icons) come out at 1024 px rather than their tiny nominal size, and anything an SVG links to outside itself is ignored, so converting one never goes online."),
         Heading("Video"),
         Para("To **MP4, WebM, MOV, GIF** and **MP3** (just the sound). It reads iPhone HEVC and ProRes videos too."),
         Heading("Audio"),
@@ -253,12 +256,14 @@ internal partial class TutorialWindow : Window
             "Next time, that exact resize or compression is a button on the wheel, named for what it does (say, **1920×1080** or **Under 25 MB**). It runs straight away, without the window."),
         Para("A compression button only appears for the kind of file it was made for: a video one for videos, and so on."),
         Heading("Arrange the wheel"),
-        Para("In **Settings → Buttons**, pick a kind of file with the **Preview as** choices, then:"),
+        Para("Out of the box, the wheel **adapts to how you use it**: every time you use a button, it counts, and the ones you use most move to the front, onto the ring. Untick **Adapt to how you use it** in Settings → Buttons to keep the built-in order instead."),
+        Para("To arrange it yourself, pick a kind of file in **Settings → Buttons** with the **Preview as** choices, then:"),
         Bullets(
-            "Move buttons **up** to give them a place on the ring, or **down** to put them behind More. Each one says where it ends up.",
-            "**Untick** buttons you never use to hide them.",
+            "Move buttons **up** to give them a place on the ring, or **down** to put them behind More. Each one says where it ends up. Once you've moved one, your order wins over adapting for that kind of file.",
+            "**Untick** buttons you never use to hide them. **BMP** and **TIFF** start out hidden; tick them to bring them back.",
             "**Delete** your own buttons with the delete button next to them.",
-            "**Reset order** puts that kind of file back to the built-in order."),
+            "**Reset order** hands that kind of file back to the built-in order (or to adapting)."),
+        Para("The wheel shows at most **16 buttons**. If you have more, the last ones in the order are left off, marked **Doesn't fit**, but buttons that open a window, like Crop, are always kept."),
         OpenSettingsButton());
 
     private FrameworkElement AfterConverting() => Page("After converting",
@@ -267,6 +272,8 @@ internal partial class TutorialWindow : Window
             "**Hover the tray icon** to see progress, for example **clip.mov → MP4 43% (+2 more)**.",
             "You get **one notification per drop** when it's done. **Open** opens the new file in its usual app, and **Open folder** (or clicking the notification) shows it in File Explorer.",
             "**Right-click the tray icon → Cancel conversions** stops everything. A cancelled or failed conversion never leaves a half-written file behind."),
+        Heading("Undo"),
+        Para("Converted the wrong thing? Click **Undo** on the notification, or right-click the tray icon → **Undo last conversion**. That conversion's new files go to the **Recycle Bin**, so you can still get them back from there. Only the most recent conversion can be undone, once. A new file you've changed since (edited, say) is left alone, and your originals are never touched."),
         Heading("Where files go"),
         Para("Next to the original, or in a folder you choose in **Settings → Features** (if that folder isn't there, say on an unplugged drive, the file goes next to the original instead). The name says what happened:"),
         Table(
@@ -281,6 +288,26 @@ internal partial class TutorialWindow : Window
         Heading("Paste the result anywhere"),
         Para("Turn on **Copy converted files to the clipboard** in Settings → Features, and finished files are copied as if you'd pressed Ctrl+C in File Explorer. Paste them straight into a chat, an email or another folder."));
 
+    private FrameworkElement WatchedFolders() => Page("Watched folders",
+        Para("A watched folder converts new files **on its own**. Pick a folder and what to do with what lands in it, and every new file there gets it, as if you'd dropped it on that button."),
+        Steps(
+            "Open **Settings → Features → Watched folders** and click **Add a folder…**.",
+            "Pick what to do: any **Convert to …** format, or one of your own resize or compress buttons.",
+            "From then on, new files in that folder are converted as they arrive. You get the usual notification, with **Undo**."),
+        Heading("Ideas"),
+        Bullets(
+            "**Screenshots → Convert to JPG**, so screenshots are small enough to send.",
+            "**Downloads → Convert to JPG**, so iPhone HEIC photos you download just work.",
+            "A folder you save phone photos into → your own **resize** button, ready for sharing."),
+        Heading("What it leaves alone"),
+        Bullets(
+            "Files that were **already there** when you added the folder.",
+            "Files still **arriving**: it waits until a download or copy has finished, so big files are fine. Partial downloads (.crdownload, .part) are skipped.",
+            "Its **own results**, even when they're saved into the same folder, so nothing is ever converted twice.",
+            "Files the action doesn't suit, such as a song in a Convert to JPG folder."),
+        Para("Tick **Subfolders too** to include the folders inside it, untick a folder to pause it, or remove it with the delete button."),
+        OpenSettingsButton());
+
     private FrameworkElement SettingsAndTray() => Page("Settings and the tray",
         Heading("The tray icon"),
         Para("**Double-click** it to open Settings. **Right-click** it for:"),
@@ -290,15 +317,16 @@ internal partial class TutorialWindow : Window
             ("Help", "This tutorial, the welcome guide from the first start, and Report a bug."),
             ("Pause gestures", "Stops right-click, Shift and Ctrl+Alt+C from opening the wheel until you untick it, handy for a game or a drawing app."),
             ("Cancel conversions", "Stops everything that's running."),
+            ("Undo last conversion", "Sends the last conversion's new files to the Recycle Bin."),
             ("Open log", "What Circularity has been doing, useful for a bug report."),
             ("Exit", "Closes Circularity until you start it again.")),
         Heading("Settings"),
         Para("Changes apply straight away, and the wheel on the left is a live preview."),
         Table(
             ("Wheel", "Theme (same as Windows, light or dark), size, background opacity and accent colour. The tray icon follows the colour."),
-            ("Buttons", "The order of the buttons for each kind of file, and which ones are hidden."),
+            ("Buttons", "The order of the buttons for each kind of file, which ones are hidden, and whether the wheel adapts to how you use it."),
             ("General", "Which gestures are on (right-click, Shift, Ctrl+Alt+C), notifications, and starting when you sign in to Windows."),
-            ("Features", "Where converted files are saved, copying them to the clipboard, and checking for updates automatically."),
+            ("Features", "Where converted files are saved, watched folders, copying results to the clipboard, checking for updates automatically, and the optional anonymous usage count."),
             ("Help", "This tutorial, the welcome guide, and Report a bug."),
             ("About", "What Circularity found on this PC, and Copy diagnostics for bug reports.")),
         OpenSettingsButton());
@@ -316,10 +344,10 @@ internal partial class TutorialWindow : Window
         Bullets(
             "Word, Excel and PowerPoint buttons need **Microsoft Office** installed.",
             "Markdown, HTML and TXT → PDF need **WebView2**, which comes with Windows 11 and most up-to-date Windows 10 PCs.",
-            "You may have hidden it, or it may be behind **More**: check **Settings → Buttons**."),
+            "You may have hidden it, it may be behind **More**, or it may not fit (the wheel shows 16 at most): check **Settings → Buttons**. **BMP** and **TIFF** are hidden until you turn them on there."),
         Heading("Known limits"),
         Bullets(
-            "HEIC and AVIF can be read but not saved. Without Microsoft's image extensions they take a moment longer to open.",
+            "Saving as **HEIC** needs Microsoft's HEVC extension; without it there's no HEIC button. HEIC and AVIF photos open on every PC, but without Microsoft's image extensions they take a moment longer.",
             "iPhone videos filmed in **HDR** can come out with paler colours.",
             "**PDF → Word** isn't offered, because Word asks a question first that an invisible Word can't answer."),
         Heading("If Circularity runs into an error"),
