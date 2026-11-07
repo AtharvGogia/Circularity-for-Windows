@@ -19,8 +19,8 @@ namespace Circularity;
 ///
 /// The ring holds at most six buttons so each stays big enough to aim at. When there are more, five
 /// of them keep their place and the bottom slot becomes "More", which opens an arc of the rest just
-/// outside the disc. A crowded arc (more than six) gets a second row outside the first: formats on
-/// one row, tools and saved buttons on the other. Buttons that open a dialog (resize, crop,
+/// outside the disc. Past five there, a second arc opens around the first for up to six more; the
+/// wheel shows no more than that. Buttons that open a dialog (resize, crop,
 /// compress) only ever sit to the left of "More": on the ring's left side, or at the left end of a row.
 /// While a button is lit, the centre says in full what it does, so a long name can be shortened on
 /// the button itself.
@@ -57,8 +57,14 @@ internal sealed class WheelView : Canvas
     /// <summary>The widest the opened arc may be, so it never wraps back around the disc.</summary>
     private const double MaxExpansionSpan = 200;
 
-    /// <summary>Most buttons the arc puts in one row; more than this and it gets a second row.</summary>
-    private const int SingleRowMax = 6;
+    /// <summary>Most buttons the first arc holds; past that, a second arc opens around it.</summary>
+    public const int FirstArcMax = 5;
+
+    /// <summary>Most buttons the second arc holds. The wheel shows no more than that.</summary>
+    public const int SecondArcMax = 6;
+
+    /// <summary>Most buttons the wheel shows behind More, both arcs together.</summary>
+    public const int MaxArcButtons = FirstArcMax + SecondArcMax;
 
     private static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
     private static readonly Duration HoverIn = TimeSpan.FromMilliseconds(130);
@@ -639,7 +645,10 @@ internal sealed class WheelView : Canvas
             ring[slot] = others.Count > 0 ? others.Dequeue() : dialogs.Dequeue();
         foreach (int slot in LeftSlots)
             ring[slot] = dialogs.Count > 0 ? dialogs.Dequeue() : others.Dequeue();
-        return (ring, others.Concat(dialogs).ToArray());
+        // The arcs hold at most MaxArcButtons. What doesn't fit is left off from the end of the
+        // ordinary buttons (the least used, or last in the user's order), never a dialog button.
+        var keptDialogs = dialogs.Take(MaxArcButtons).ToArray();
+        return (ring, others.Take(MaxArcButtons - keptDialogs.Length).Concat(keptDialogs).ToArray());
     }
 
     /// <summary>
@@ -734,35 +743,16 @@ internal sealed class WheelView : Canvas
     }
 
     /// <summary>
-    /// One row for up to <see cref="SingleRowMax"/> buttons; two for more. Formats get one row and
-    /// everything else (tools, saved buttons) the other, when each lot fits a row, with the bigger lot
-    /// outside; otherwise it's split in half. The dialog buttons stay last either way, so they end up
-    /// at the left end of their row.
+    /// The first arc takes up to <see cref="FirstArcMax"/> buttons, in order; only past that does the
+    /// second arc open, for the rest (<see cref="Layout"/> has already left off any beyond
+    /// <see cref="SecondArcMax"/> there). Dialog buttons come last, so they end up at the left end.
     /// </summary>
     private void SplitRows()
     {
         int count = _arcTargets.Length;
-        _arcRows = count > SingleRowMax ? 2 : 1;
-        if (_arcRows == 1)
-        {
-            (_rowCount[0], _rowCount[1]) = (count, 0);
-            return;
-        }
-        var formats = _arcTargets.Where(t => _actions[t].Kind == WheelActionKind.Convert).ToArray();
-        var rest = _arcTargets.Where(t => _actions[t].Kind != WheelActionKind.Convert).ToArray();
-        int fits = SingleRowMax + 2;
-        if (formats.Length > 0 && rest.Length > 0 && formats.Length <= fits && rest.Length <= fits)
-        {
-            // The outer row is longer around, so the bigger lot goes there and the rows come out
-            // about as wide as each other.
-            var (inner, outer) = formats.Length <= rest.Length ? (formats, rest) : (rest, formats);
-            _arcTargets = inner.Concat(outer).ToArray();
-            (_rowCount[0], _rowCount[1]) = (inner.Length, outer.Length);
-        }
-        else
-        {
-            (_rowCount[0], _rowCount[1]) = (count / 2, count - count / 2);
-        }
+        _arcRows = count > FirstArcMax ? 2 : 1;
+        _rowCount[0] = Math.Min(count, FirstArcMax);
+        _rowCount[1] = count - _rowCount[0];
     }
 
     private void BuildCenter()

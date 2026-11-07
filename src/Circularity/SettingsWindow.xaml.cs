@@ -422,6 +422,8 @@ internal partial class SettingsWindow : Window
         var (ring, arc) = WheelView.Layout(shown);
         var onRing = ring.Where(i => i >= 0).Select(i => shown[i].Id).ToHashSet();
         var inArc = arc.Select(i => shown[i].Id).ToHashSet();
+        // Shown and available, but past what the wheel holds.
+        var tooMany = shown.Select(a => a.Id).Where(id => !onRing.Contains(id) && !inArc.Contains(id)).ToHashSet();
         var hidden = Formats.LayoutFor(_settings, _kind).Hidden;
         string ext = Formats.NormalizedExtension(_sample);
 
@@ -434,6 +436,7 @@ internal partial class SettingsWindow : Window
             string where = hidden.Contains(id) ? "Hidden"
                 : onRing.Contains(id) ? "On the wheel"
                 : inArc.Contains(id) ? "Behind More"
+                : tooMany.Contains(id) ? $"Doesn't fit: the wheel holds {WheelView.MaxRingButtons - 1 + WheelView.MaxArcButtons}"
                 : action.Kind == WheelActionKind.Combine ? "When several files are dropped"
                 : action.Kind == WheelActionKind.Compress && _kind == FileKind.Document ? "For PDFs"
                 : action.Kind == WheelActionKind.Convert && !Formats.Offers(_sample, action.Target!) ? $"Not for .{ext} files"

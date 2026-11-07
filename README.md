@@ -67,9 +67,9 @@ A tray app that:
    file has more to offer, the bottom one becomes **More**: resting on it fans the rest out into an
    arc just outside the wheel, which you drop onto the same way. Everyday formats sit at the top and
    on the right; buttons that open a dialog first (Resize, Compress, Crop) always sit to the left of
-   More, on the ring or at the left end of the arc. When there are more than six behind More, a
-   second, wider arc opens around the first: formats on one, tools and your own buttons on the
-   other. Near the bottom of the screen, where the arc wouldn't fit, More moves to the top and the
+   More, on the ring or at the left end of the arc. The arc holds five; past that, a second, wider
+   arc opens around it for up to six more. That's the most the wheel shows: 16 buttons in all, and
+   Settings → Buttons says which ones don't fit. Near the bottom of the screen, where the arc wouldn't fit, More moves to the top and the
    arc opens upwards instead. Whichever button you're on, the middle of the wheel says what it does
    in full ("Convert to WEBP", "Crop…"), so a long name shortened on its button is never a guess.
 

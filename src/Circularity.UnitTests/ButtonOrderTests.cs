@@ -85,6 +85,36 @@ public class ButtonOrderTests
     }
 
     [Fact]
+    public void TheWheel_HoldsSixteen_AndKeepsDialogButtons()
+    {
+        // 18 formats and two dialog buttons: the ring takes 5 (+ More), the arcs 11, so four don't fit.
+        var actions = Enumerable.Range(0, 18).Select(i => new WheelAction(WheelActionKind.Convert, $"F{i}", "", $"f{i}"))
+            .Append(new WheelAction(WheelActionKind.Resize, "Resize", ""))
+            .Append(new WheelAction(WheelActionKind.Crop, "Crop", ""))
+            .ToArray();
+
+        var (ring, arc) = WheelView.Layout(actions);
+
+        Assert.Equal(WheelView.MaxRingButtons, ring.Length);
+        Assert.Equal(WheelView.MaxArcButtons, arc.Length);
+        var shown = ring.Where(i => i >= 0).Concat(arc).Select(i => actions[i].Label).ToHashSet();
+        Assert.Contains("Resize", shown);
+        Assert.Contains("Crop", shown);
+        // The last formats in the order are the ones left off.
+        Assert.DoesNotContain("F17", shown);
+        Assert.Contains("F0", shown);
+    }
+
+    [Fact]
+    public void AFewButtons_NeedOnlyOneArc()
+    {
+        var actions = Enumerable.Range(0, 10).Select(i => new WheelAction(WheelActionKind.Convert, $"F{i}", "", $"f{i}")).ToArray();
+        var (_, arc) = WheelView.Layout(actions);
+        Assert.Equal(5, arc.Length); // 5 on the ring + More, 5 in the first arc: no second arc needed
+        Assert.True(arc.Length <= WheelView.FirstArcMax);
+    }
+
+    [Fact]
     public void OlderSettings_AdaptByDefault_AndRoundTrip()
     {
         var old = Settings.FromJson("""{"Version": 2}""");
