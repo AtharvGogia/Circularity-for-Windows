@@ -15,6 +15,10 @@ internal partial class SettingsWindow : Window
     /// <summary>Raised on every change with a copy of the new settings.</summary>
     public event Action<Settings>? SettingsChanged;
 
+    // Dragging a slider changes the settings many times a second. The preview follows every step, but
+    // the app (which redraws the wheel and tray icon and saves to disk) only hears once it pauses.
+    private System.Windows.Threading.DispatcherTimer? _publishTimer;
+
     /// <summary>Raised when "Check for updates" is clicked.</summary>
     public event Action? CheckForUpdatesRequested;
 
@@ -322,7 +326,7 @@ internal partial class SettingsWindow : Window
         change(_settings.WatchedFolders);
         // Rebuilt after the event that changed it has finished, since that control is about to be replaced.
         Dispatcher.BeginInvoke(BuildWatchedFolders);
-        SettingsChanged?.Invoke(_settings.Clone());
+        Publish();
     }
 
     private void ShowChosenFolder()
@@ -360,7 +364,32 @@ internal partial class SettingsWindow : Window
             : DarkTheme.IsChecked == true ? AppTheme.Dark
             : AppTheme.System;
         Refresh();
+        PublishSoon();
+    }
+
+    private void PublishSoon()
+    {
+        if (_publishTimer == null)
+        {
+            _publishTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            _publishTimer.Tick += (_, _) => Publish();
+        }
+        _publishTimer.Stop();
+        _publishTimer.Start();
+    }
+
+    private void Publish()
+    {
+        _publishTimer?.Stop();
         SettingsChanged?.Invoke(_settings.Clone());
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        // A change still waiting isn't lost by closing the window straight after it.
+        if (_publishTimer?.IsEnabled == true)
+            Publish();
+        base.OnClosed(e);
     }
 
     private void Refresh()
@@ -555,7 +584,7 @@ internal partial class SettingsWindow : Window
     private void ButtonsChanged()
     {
         RefreshButtons();
-        SettingsChanged?.Invoke(_settings.Clone());
+        Publish();
     }
 
     // --- About tab ---
@@ -618,6 +647,7 @@ internal partial class SettingsWindow : Window
 
     private void OpenLog_Click(object sender, RoutedEventArgs e)
     {
+        Log.Flush();
         if (System.IO.File.Exists(Log.FilePath))
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Log.FilePath) { UseShellExecute = true });
     }
@@ -690,7 +720,7 @@ internal partial class SettingsWindow : Window
         _settings.AccentChosen = true;
         BuildSwatches();
         Refresh();
-        SettingsChanged?.Invoke(_settings.Clone());
+        Publish();
     }
 
     private void Reset_Click(object sender, RoutedEventArgs e)
@@ -698,7 +728,7 @@ internal partial class SettingsWindow : Window
         // Not preferences, so resetting shouldn't bring the welcome back or delete the user's buttons or watched folders.
         _settings = new Settings { WelcomeShown = _settings.WelcomeShown, Presets = _settings.Presets, WatchedFolders = _settings.WatchedFolders };
         LoadControls();
-        SettingsChanged?.Invoke(_settings.Clone());
+        Publish();
     }
 
     private void Done_Click(object sender, RoutedEventArgs e) => Close();

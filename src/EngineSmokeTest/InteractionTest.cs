@@ -222,13 +222,13 @@ internal static class InteractionTest
         try
         {
             // SVSI_SELECT | SVSI_DESELECTOTHERS | SVSI_FOCUSED
-            window.Document.SelectItem(item, 1 | 4 | 16);
+            window!.Document.SelectItem(item, 1 | 4 | 16);
             Pump(() => false, 500);
             return (ExplorerSelection.ForWindow(new IntPtr(Convert.ToInt64(window.HWND))), null);
         }
         finally
         {
-            window.Quit();
+            window!.Quit();
         }
     }
 

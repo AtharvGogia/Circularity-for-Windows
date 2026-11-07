@@ -25,7 +25,7 @@ internal sealed class UsagePing
     /// <param name="http">Injectable for tests; defaults to a client that identifies itself as Circularity.</param>
     public UsagePing(HttpClient? http = null, string? url = null)
     {
-        _http = http ?? CreateClient();
+        _http = http ?? SharedClient.Value;
         _url = url ?? DefaultUrl;
     }
 
@@ -55,6 +55,10 @@ internal sealed class UsagePing
         }
         return false;
     }
+
+    // One for the app's lifetime: a new HttpClient per check would leave its connections open until
+    // the garbage collector got round to them.
+    private static readonly Lazy<HttpClient> SharedClient = new(CreateClient);
 
     private static HttpClient CreateClient()
     {

@@ -79,6 +79,13 @@ internal sealed class WheelView : Canvas
 
     private readonly Image _discShadow = new() { IsHitTestVisible = false };
     private readonly Image _arcShadow = new() { IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+
+    // The arc's shadow is the slowest part of laying the wheel out, and the arc is hidden until "More"
+    // opens, so it's only drawn then (see ArcShadowSource), and kept for each arc shape until the
+    // settings change.
+    private Geometry? _arcShadowShape;
+    private string _arcShadowKey = "";
+    private readonly Dictionary<string, BitmapSource> _arcShadows = new();
     private readonly Canvas _backdrop = new();
     private readonly Ellipse _disc;
     private readonly Path _arc;
@@ -244,6 +251,7 @@ internal sealed class WheelView : Canvas
         SetTop(_disc, Mid - Radius);
         _discShadow.Width = _discShadow.Height = _arcShadow.Width = _arcShadow.Height = Extent;
         _discShadow.Source = Shadow(new EllipseGeometry(new Point(Mid, Mid), Radius, Radius));
+        _arcShadows.Clear();
 
         // The very same gradient, laid out around the wheel's centre, so the arc is the disc's surface
         // carried on past its edge: same colour, same transparency.
@@ -391,6 +399,7 @@ internal sealed class WheelView : Canvas
         if (_expanded || _arcTargets.Length == 0)
             return;
         _expanded = true;
+        _arcShadow.Source = ArcShadowSource();
         HighlightMore(true);
         var fadeEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
         var growEase = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 };
@@ -664,6 +673,7 @@ internal sealed class WheelView : Canvas
         {
             _arc.Data = _arcOutline.Data = Geometry.Empty;
             _arcShadow.Source = null;
+            _arcShadowShape = null;
             return;
         }
 
@@ -717,7 +727,7 @@ internal sealed class WheelView : Canvas
         {
             _arc.Data = Band(arcFrom, to, Radius - 1, ArcRim, side, 0, outerCorner);
             // Drawn from the part outside the disc only, so the two shadows meet without doubling up.
-            _arcShadow.Source = Shadow(Band(arcFrom, to, Radius, ArcRim, side, 0, outerCorner));
+            SetArcShadow(Band(arcFrom, to, Radius, ArcRim, side, 0, outerCorner));
             // The outline follows the backdrop's sides and outer edge; along the disc, the disc's own edge does.
             _arcOutline.Data = Band(arcFrom, to, Radius, ArcRim, side, 0, outerCorner, closed: false);
             return;
@@ -733,13 +743,36 @@ internal sealed class WheelView : Canvas
         double fromB = ArcCenter - _rowSpan[1] / 2, toB = ArcCenter + _rowSpan[1] / 2;
         var second = Band(fromB, toB, edge, ArcRim, side, secondCorner, secondCorner);
         _arc.Data = new GeometryGroup { Children = { Band(fromA, toA, Radius - 1, edge, side, 0, firstCorner), second } };
-        _arcShadow.Source = Shadow(new GeometryGroup { Children = { Band(fromA, toA, Radius, edge, side, 0, firstCorner), second } });
+        SetArcShadow(new GeometryGroup { Children = { Band(fromA, toA, Radius, edge, side, 0, firstCorner), second } });
         // The first arc's outline stops at the disc, like a single arc's; the second's goes all round,
         // its inner edge being the line where the two arcs meet.
         _arcOutline.Data = new GeometryGroup
         {
             Children = { Band(fromA, toA, Radius, edge, side, 0, firstCorner, closed: false), second },
         };
+    }
+
+    /// <summary>Notes the arc's shape for its shadow, which is drawn when the arc first opens.</summary>
+    private void SetArcShadow(Geometry shape)
+    {
+        // Everything else the shape depends on comes from the settings, which clear the cache.
+        _arcShadowKey = string.Join("|", _arcRows, _arcSpan, _rowSpan[0], _rowSpan[1], ArcCenter);
+        _arcShadowShape = shape;
+        _arcShadow.Source = _arcShadows.GetValueOrDefault(_arcShadowKey);
+    }
+
+    private BitmapSource? ArcShadowSource()
+    {
+        if (_arcShadowShape == null)
+            return null;
+        if (!_arcShadows.TryGetValue(_arcShadowKey, out var shadow))
+        {
+            // A few shapes at most (each kind of file, above or below), but each is a full-size picture.
+            if (_arcShadows.Count >= 6)
+                _arcShadows.Clear();
+            _arcShadows[_arcShadowKey] = shadow = Shadow(_arcShadowShape);
+        }
+        return shadow;
     }
 
     /// <summary>

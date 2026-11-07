@@ -33,7 +33,7 @@ internal sealed partial class UpdateChecker
     /// <param name="http">Injectable for tests; defaults to a client that identifies itself to GitHub.</param>
     public UpdateChecker(HttpClient? http = null, string? latestReleaseUrl = null)
     {
-        _http = http ?? CreateClient();
+        _http = http ?? SharedClient.Value;
         _latestReleaseUrl = latestReleaseUrl ?? $"https://api.github.com/repos/{Repository}/releases/latest";
     }
 
@@ -146,6 +146,10 @@ internal sealed partial class UpdateChecker
         version = match.Success ? new Version(Part(1), Part(2), Part(3), Part(4)) : new Version(0, 0, 0, 0);
         return match.Success;
     }
+
+    // One for the app's lifetime: a new HttpClient per check would leave its connections open until
+    // the garbage collector got round to them.
+    private static readonly Lazy<HttpClient> SharedClient = new(CreateClient);
 
     private static HttpClient CreateClient()
     {

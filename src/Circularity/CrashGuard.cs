@@ -117,6 +117,8 @@ internal static class CrashGuard
         string path = Path.Combine(Folder, $"crash {time}{(fatal ? "" : " (recovered)")}.txt");
         TryWrite(path, text);
         Prune();
+        if (fatal)
+            Log.Flush(); // The process may end any moment now.
         return new CrashReport(path, exception.GetType().Name, exception.Message, text);
     }
 
@@ -135,6 +137,7 @@ internal static class CrashGuard
         {
             Log.Write($"Couldn't restart after the crash: {ex.Message}");
         }
+        Log.Flush();
     }
 
     private static void Prune()

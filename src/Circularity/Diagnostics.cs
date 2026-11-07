@@ -74,6 +74,7 @@ internal static class Diagnostics
     {
         try
         {
+            Log.Flush();
             // Opened for sharing, since the app keeps appending to it.
             using var stream = new FileStream(Log.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             using var reader = new StreamReader(stream);

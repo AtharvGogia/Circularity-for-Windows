@@ -91,7 +91,9 @@ internal static class DragTest
         // Where buttons sit, from a wheel laid out the same way, relative to its centre.
         var layout = new WheelView();
         layout.ApplySettings(settings);
-        layout.SetActions(Formats.ActionsFor(new[] { file }, (_, _) => true).Actions, "");
+        // Near the bottom of a small screen the arc opens above, and the drop point has to follow it.
+        layout.ArcAbove = wheel.ArcOpensAboveAt((int)catcherCenter.X, (int)catcherCenter.Y);
+        layout.SetActions(Formats.ActionsFor(new[] { file }, (_, _) => true, settings).Actions, "");
         Point Screen(int target)
         {
             var at = layout.PointFor(target)!.Value;

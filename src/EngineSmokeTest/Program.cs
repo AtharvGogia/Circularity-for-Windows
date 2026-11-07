@@ -16,6 +16,7 @@ namespace EngineSmokeTest;
 ///
 ///   dotnet run --project src/EngineSmokeTest
 ///   dotnet run --project src/EngineSmokeTest -- --render-previews &lt;folder&gt;   (PNGs of the UI)
+///   dotnet run --project src/EngineSmokeTest -c Release -- --bench-wheel   (wheel timings)
 /// </summary>
 internal static class Program
 {
@@ -25,6 +26,8 @@ internal static class Program
     {
         if (args.Length == 2 && args[0] == "--render-previews")
             return Previews.Render(args[1]);
+        if (args.Length == 1 && args[0] == "--bench-wheel")
+            return WheelBench.Run();
         if (args.Length == 1 && args[0] == "--drag-test")
             return DragTest.Run();
         if (args.Length == 1 && args[0] == "--startup-test")

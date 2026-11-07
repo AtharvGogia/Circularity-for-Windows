@@ -175,6 +175,9 @@ internal partial class WheelWindow : Window
     /// here (physical pixels), with room for it above instead. In drag mode the wheel can't move away
     /// from the cursor, so flipping is the only way to keep the arc reachable.
     /// </summary>
+    /// <summary>For tests: whether the arc would open above the wheel shown at this point.</summary>
+    internal bool ArcOpensAboveAt(int x, int y) => ArcShouldOpenAbove(x, y);
+
     private bool ArcShouldOpenAbove(int x, int y)
     {
         var area = Forms.Screen.FromPoint(new System.Drawing.Point(x, y)).WorkingArea;

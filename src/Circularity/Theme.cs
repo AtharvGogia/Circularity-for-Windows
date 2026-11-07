@@ -18,12 +18,15 @@ internal static class Theme
     /// <summary>Gives a dialog the Windows 11 look in the chosen theme.</summary>
     public static void ApplyTo(Window window, AppTheme theme)
     {
-        window.ThemeMode = theme switch
+        var mode = theme switch
         {
             AppTheme.Light => ThemeMode.Light,
             AppTheme.Dark => ThemeMode.Dark,
             _ => ThemeMode.System,
         };
+        // Only when it changes: this runs on every step of a slider in Settings.
+        if (window.ThemeMode != mode)
+            window.ThemeMode = mode;
     }
 
     /// <summary>Settings → Personalization → Colors → "Choose your default Windows mode": the taskbar's colour.</summary>
