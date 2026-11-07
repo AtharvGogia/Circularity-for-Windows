@@ -614,6 +614,7 @@ public partial class App : Application
 
     private async void OnActionChosen(string[] files, WheelAction action)
     {
+        CountUse(files, action);
         if (action.Kind == WheelActionKind.Convert)
         {
             _queue!.Enqueue(files, new ConvertTo(action.Target!));
@@ -673,6 +674,22 @@ public partial class App : Application
             // The crop window holds the whole picture; let it go even if nothing was converted.
             ScheduleMemoryRelease();
         }
+    }
+
+    /// <summary>
+    /// For "Adapt to how you use it": one more use of this button for this kind of file. Only while the
+    /// setting is on, and only for a single kind (a mix has no order of its own).
+    /// </summary>
+    private void CountUse(string[] files, WheelAction action)
+    {
+        if (!_settings.AdaptToUse || action.Kind == WheelActionKind.More)
+            return;
+        var kinds = files.Select(Formats.KindOf).Distinct().ToList();
+        if (kinds.Count != 1)
+            return;
+        // The wheel shares this settings object and works its buttons out afresh each time it opens.
+        _settings.CountUse(kinds[0], action.Id);
+        _settings.Save();
     }
 
     /// <summary>New files in a watched folder: each one its action suits is converted, as if dropped on its button.</summary>
@@ -909,6 +926,7 @@ public partial class App : Application
         {
             // Kept by the app, not shown in Settings, so the window's copy may be out of date.
             settings.LastNotifiedUpdate = _settings.LastNotifiedUpdate;
+            settings.UseCounts = _settings.UseCounts;
             if (settings.ShareUsageCount && _settings.ShareUsageCount)
             {
                 settings.UsageId = _settings.UsageId;

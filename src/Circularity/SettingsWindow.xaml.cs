@@ -103,6 +103,11 @@ internal partial class SettingsWindow : Window
         NotifyStartCheck.Click += (_, _) => OnControlChanged();
         AutoCheckUpdatesCheck.Click += (_, _) => OnAutoCheckToggled();
         ShareUsageCheck.Click += (_, _) => OnControlChanged();
+        AdaptCheck.Click += (_, _) =>
+        {
+            _settings.AdaptToUse = AdaptCheck.IsChecked == true;
+            ButtonsChanged();
+        };
         AutoCheckIntervalCombo.SelectionChanged += (_, _) => OnControlChanged();
         SaveBesideRadio.Checked += (_, _) => OnControlChanged();
         SaveToFolderRadio.Checked += (_, _) =>
@@ -137,6 +142,7 @@ internal partial class SettingsWindow : Window
         NotifyStartCheck.IsChecked = _settings.NotifyOnStart;
         AutoCheckUpdatesCheck.IsChecked = _settings.AutoCheckForUpdates;
         ShareUsageCheck.IsChecked = _settings.ShareUsageCount;
+        AdaptCheck.IsChecked = _settings.AdaptToUse;
         PopulateAutoCheckIntervals();
         int savedHours = Settings.ClampUpdateInterval(_settings.AutoCheckIntervalHours);
         foreach (ComboBoxItem item in AutoCheckIntervalCombo.Items)
@@ -416,7 +422,7 @@ internal partial class SettingsWindow : Window
         var (ring, arc) = WheelView.Layout(shown);
         var onRing = ring.Where(i => i >= 0).Select(i => shown[i].Id).ToHashSet();
         var inArc = arc.Select(i => shown[i].Id).ToHashSet();
-        var hidden = Layout(create: false)?.Hidden ?? new List<string>();
+        var hidden = Formats.LayoutFor(_settings, _kind).Hidden;
         string ext = Formats.NormalizedExtension(_sample);
 
         var all = Formats.AllButtonsFor(_kind, _settings);
@@ -497,8 +503,9 @@ internal partial class SettingsWindow : Window
     private ButtonLayout? Layout(bool create)
     {
         string key = _kind.ToString();
+        // A new layout starts from the built-in one, so the formats hidden by default stay hidden.
         if (!_settings.ButtonLayouts.TryGetValue(key, out var layout) && create)
-            _settings.ButtonLayouts[key] = layout = new ButtonLayout();
+            _settings.ButtonLayouts[key] = layout = Formats.DefaultLayout(_kind);
         return layout;
     }
 

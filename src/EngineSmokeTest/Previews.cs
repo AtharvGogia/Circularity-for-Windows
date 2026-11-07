@@ -32,6 +32,19 @@ internal static class Previews
         Download **CircularitySetup-0.5.0.exe** below, or see the [release page](https://github.com/AtharvGogia/Circularity-for-Windows/releases).
         """;
 
+    /// <summary>Settings with every image format shown (BMP and TIFF too) and four saved buttons.</summary>
+    private static Settings Crowded() => new()
+    {
+        ButtonLayouts = { ["Image"] = new ButtonLayout() },
+        Presets =
+        {
+            new Preset("p1", "Insta 1080", Resize: new ResizeSpec(ResizeKind.Fit, 1080, 1080)),
+            new Preset("p2", "Email", Compress: new CompressSpec(Quality: 60), Kind: "Image"),
+            new Preset("p3", "Thumb", Resize: new ResizeSpec(ResizeKind.Fit, 320, 320)),
+            new Preset("p4", "Under 1 MB", Compress: new CompressSpec(Quality: 70), Kind: "Image"),
+        },
+    };
+
     public static int Render(string folder)
     {
         int exitCode = 1;
@@ -44,6 +57,9 @@ internal static class Previews
             {
                 ("wheel-default", new Settings(), false),
                 ("wheel-more-open", new Settings(), true),
+                // Every image format turned on, plus four saved buttons: the arc's two rows.
+                ("wheel-crowded", Crowded(), true),
+                ("wheel-crowded-above", Crowded(), true),
                 ("wheel-more-open-light", new Settings { Theme = AppTheme.Light }, true),
                 ("wheel-more-open-above", new Settings(), true),
                 ("wheel-small-blue-60pct", new Settings { WheelSize = 200, AccentColor = "#3B82F6", Opacity = 0.6 }, false),
@@ -58,7 +74,7 @@ internal static class Previews
                 view.ApplySettings(settings);
                 view.ArcAbove = name.EndsWith("-above");
                 // A long name, to show it shortened in the middle.
-                view.SetActions(actions, "IMG_20250908_105605_Pro.jpg", "3.4 MB");
+                view.SetActions(name.StartsWith("wheel-crowded") ? Formats.ActionsFor(new[] { "photo.jpg" }, (_, _) => true, settings).Actions : actions, "IMG_20250908_105605_Pro.jpg", "3.4 MB");
                 view.SetHot(expanded ? WheelView.MoreIndex : 1);
                 if (expanded && view.ArcOrder.Count > 0)
                     view.SetHot(view.ArcOrder[^1]);
@@ -103,13 +119,16 @@ internal static class Previews
                 desktopBg.Children.Add(iconsPanel);
 
                 // Position the wheel near the center-bottom (where a drag might end up)
+                // With the arc opening upwards, the wheel sits lower, just above the taskbar, so the arc
+                // has the room above it that made it open that way.
+                bool above = name.EndsWith("-above");
                 var wheelContainer = new Grid
                 {
                     Width = view.Extent,
                     Height = view.Extent,
-                    VerticalAlignment = VerticalAlignment.Bottom,
+                    VerticalAlignment = above ? VerticalAlignment.Top : VerticalAlignment.Bottom,
                     HorizontalAlignment = HorizontalAlignment.Center,
-                    Margin = new Thickness(0, 0, 0, 80), // Above taskbar area
+                    Margin = above ? new Thickness(0, 320 - view.Extent / 2, 0, 0) : new Thickness(0, 0, 0, 80), // Above taskbar area
                     Children = { view },
                 };
                 desktopBg.Children.Add(wheelContainer);

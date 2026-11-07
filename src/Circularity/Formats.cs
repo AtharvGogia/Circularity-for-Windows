@@ -231,8 +231,11 @@ internal static class Formats
             // A preset appears wherever its tool does (a compress preset, only for the kind it was made for).
             actions.AddRange(PresetActions(settings, tools, kinds.Count == 1 ? kinds[0] : FileKind.Mixed)
                 .Where(a => files.All(f => canHandle(f, a.Preset!.Operation))));
-            if (kinds.Count == 1 && settings.ButtonLayouts.TryGetValue(kinds[0].ToString(), out var layout))
-                actions = Arrange(actions, layout).Where(a => !layout.Hidden.Contains(a.Id)).ToList();
+            if (kinds.Count == 1)
+            {
+                var layout = LayoutFor(settings, kinds[0]);
+                actions = Ordered(actions, layout, settings, kinds[0]).Where(a => !layout.Hidden.Contains(a.Id)).ToList();
+            }
         }
 
         string label = kinds.Count > 1
@@ -302,7 +305,45 @@ internal static class Formats
         if (kind is FileKind.Image or FileKind.Document)
             all.Add(Combine);
         all.AddRange(PresetActions(settings, tools, kind));
-        return settings.ButtonLayouts.TryGetValue(kind.ToString(), out var layout) ? Arrange(all, layout) : all;
+        return Ordered(all, LayoutFor(settings, kind), settings, kind);
+    }
+
+    /// <summary>
+    /// Formats hidden until they're turned on in Settings → Buttons: ones few people want, which would
+    /// otherwise crowd the "More" arc. Only for kinds whose buttons haven't been changed yet.
+    /// </summary>
+    private static readonly Dictionary<FileKind, string[]> HiddenByDefault = new()
+    {
+        [FileKind.Image] = new[] { "bmp", "tiff" },
+    };
+
+    /// <summary>The user's layout for a kind, or the built-in one (with its hidden-by-default formats).</summary>
+    public static ButtonLayout LayoutFor(Settings settings, FileKind kind) =>
+        settings.ButtonLayouts.TryGetValue(kind.ToString(), out var layout) ? layout : DefaultLayout(kind);
+
+    /// <summary>A kind's layout before the user has changed anything: built-in order, a few formats hidden.</summary>
+    public static ButtonLayout DefaultLayout(FileKind kind) => new()
+    {
+        Hidden = HiddenByDefault.TryGetValue(kind, out var hidden) ? hidden.ToList() : new List<string>(),
+    };
+
+    /// <summary>
+    /// The buttons in the order the wheel shows them: the user's own order if they've set one;
+    /// otherwise, with "Adapt to how you use it" on, the ones used most first (ties, and buttons never
+    /// used, keep the built-in order); otherwise the built-in order.
+    /// </summary>
+    private static List<WheelAction> Ordered(List<WheelAction> actions, ButtonLayout layout, Settings settings, FileKind kind)
+    {
+        if (layout.Order.Count > 0)
+            return Arrange(actions, layout);
+        if (!settings.AdaptToUse || !settings.UseCounts.TryGetValue(kind.ToString(), out var counts) || counts.Count == 0)
+            return actions;
+        return actions
+            .Select((action, index) => (action, index))
+            .OrderByDescending(x => counts.TryGetValue(x.action.Id, out int n) ? n : 0)
+            .ThenBy(x => x.index)
+            .Select(x => x.action)
+            .ToList();
     }
 
     /// <summary>Every format anything can be converted to, for a watched folder's choice of what to do.</summary>

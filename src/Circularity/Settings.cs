@@ -88,6 +88,23 @@ internal sealed class Settings
     /// <summary>Saved resize and compress settings, offered on the wheel as one-click buttons.</summary>
     public List<Preset> Presets { get; set; } = new();
 
+    /// <summary>
+    /// "Adapt to how you use it": unless the user has set their own order for a kind of file, the buttons
+    /// they use most move to the front, onto the ring.
+    /// </summary>
+    public bool AdaptToUse { get; set; } = true;
+
+    /// <summary>How often each button has been used, per kind of file ("Image" → "png" → 12). Counted while <see cref="AdaptToUse"/> is on.</summary>
+    public Dictionary<string, Dictionary<string, int>> UseCounts { get; set; } = new();
+
+    /// <summary>Counts one use of a button for a kind of file.</summary>
+    public void CountUse(FileKind kind, string buttonId)
+    {
+        if (!UseCounts.TryGetValue(kind.ToString(), out var counts))
+            UseCounts[kind.ToString()] = counts = new Dictionary<string, int>();
+        counts[buttonId] = counts.TryGetValue(buttonId, out int n) ? n + 1 : 1;
+    }
+
     /// <summary>Folders where every new file is converted (or has a preset applied) as soon as it arrives.</summary>
     public List<WatchedFolder> WatchedFolders { get; set; } = new();
 
@@ -127,6 +144,7 @@ internal sealed class Settings
         var copy = (Settings)MemberwiseClone();
         copy.Presets = new List<Preset>(Presets);
         copy.WatchedFolders = new List<WatchedFolder>(WatchedFolders);
+        copy.UseCounts = UseCounts.ToDictionary(pair => pair.Key, pair => new Dictionary<string, int>(pair.Value));
         copy.ButtonLayouts = ButtonLayouts.ToDictionary(pair => pair.Key, pair => pair.Value.Clone());
         return copy;
     }
@@ -214,6 +232,7 @@ internal sealed class Settings
             AccentColor = DefaultAccent;
         Presets = (Presets ?? new()).Where(p => p is { Id.Length: > 0, Name.Length: > 0 } && (p.Resize != null) != (p.Compress != null)).ToList();
         ButtonLayouts ??= new();
+        UseCounts ??= new();
         WatchedFolders = (WatchedFolders ?? new()).Where(w => w is { Id.Length: > 0, Path.Length: > 0, Action.Length: > 0 }).ToList();
         NormalizeUsage();
         return this;

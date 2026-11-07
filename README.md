@@ -67,8 +67,15 @@ A tray app that:
    file has more to offer, the bottom one becomes **More**: resting on it fans the rest out into an
    arc just outside the wheel, which you drop onto the same way. Everyday formats sit at the top and
    on the right; buttons that open a dialog first (Resize, Compress, Crop) always sit to the left of
-   More, on the ring or at the left end of the arc. Near the bottom of the screen, where the arc
-   wouldn't fit, More moves to the top and the arc opens upwards instead.
+   More, on the ring or at the left end of the arc. When there are more than six behind More, a
+   second, wider arc opens around the first: formats on one, tools and your own buttons on the
+   other. Near the bottom of the screen, where the arc wouldn't fit, More moves to the top and the
+   arc opens upwards instead. Whichever button you're on, the middle of the wheel says what it does
+   in full ("Convert to WEBP", "Crop…"), so a long name shortened on its button is never a guess.
+
+   By default the wheel **adapts to how you use it**: the buttons you use most move to the front,
+   onto the ring. Turn it off in Settings → Buttons, or set your own order there, which then stays
+   put. BMP and TIFF are hidden until you turn them on, since few people need them.
 
    While you drag, the label under the file says what letting go will do ("Convert to PNG", or
    "Cancel" over the middle), for drags that Windows draws, such as those from File Explorer.
@@ -186,7 +193,8 @@ Settings is live: hover and click it, and switch it between image, video, audio 
   any custom colour; the tray icon follows it)
 - **Buttons**: for each kind of file, move buttons up and down (higher ones get a place on the ring
   first, the rest go behind More), hide the ones you never use, and delete your own buttons. Each
-  one says where it ends up. Dialog buttons stay left of More whatever the order.
+  one says where it ends up. Dialog buttons stay left of More whatever the order. **Adapt to how you
+  use it** (on by default) puts the buttons you use most first, until you set an order yourself
 - **General**: which **gestures** are on (right-click, Shift, the Ctrl+Alt+C shortcut),
   **notifications** when conversions finish and when Circularity starts (problems always show), and
   **start at sign-in**: the same Windows sign-in entry the installer's checkbox creates, so the two

@@ -19,8 +19,11 @@ namespace Circularity;
 ///
 /// The ring holds at most six buttons so each stays big enough to aim at. When there are more, five
 /// of them keep their place and the bottom slot becomes "More", which opens an arc of the rest just
-/// outside the disc. Buttons that open a dialog (resize, crop, compress) only ever sit to the left
-/// of "More": on the ring's left side, or at the left end of the arc.
+/// outside the disc. A crowded arc (more than six) gets a second row outside the first: formats on
+/// one row, tools and saved buttons on the other. Buttons that open a dialog (resize, crop,
+/// compress) only ever sit to the left of "More": on the ring's left side, or at the left end of a row.
+/// While a button is lit, the centre says in full what it does, so a long name can be shortened on
+/// the button itself.
 ///
 /// The disc and the arc's backdrop are created once and never replaced. They are the only elements
 /// that take part in hit-testing, and WPF tracks drag-and-drop by element: if they were rebuilt
@@ -54,6 +57,9 @@ internal sealed class WheelView : Canvas
     /// <summary>The widest the opened arc may be, so it never wraps back around the disc.</summary>
     private const double MaxExpansionSpan = 200;
 
+    /// <summary>Most buttons the arc puts in one row; more than this and it gets a second row.</summary>
+    private const int SingleRowMax = 6;
+
     private static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
     private static readonly Duration HoverIn = TimeSpan.FromMilliseconds(130);
     private static readonly Duration HoverOut = TimeSpan.FromMilliseconds(180);
@@ -84,7 +90,12 @@ internal sealed class WheelView : Canvas
     private string _centerFittedLabel = "";
     private int[] _ringTargets = Array.Empty<int>();
     private int[] _arcTargets = Array.Empty<int>();
-    private double _arcStep, _arcSpan, _ringMid;
+    private double _arcSpan, _ringMid;
+    // The arc's rows (one, or two when crowded): how many buttons each has, how wide each button is
+    // (degrees) and how wide the row is. _arcTargets lists the inner row first, each from its right end.
+    private int _arcRows = 1;
+    private readonly int[] _rowCount = new int[2];
+    private readonly double[] _rowStep = new double[2], _rowSpan = new double[2];
     private bool _expanded;
     private bool _arcAbove;
     private int _hot = -1;
@@ -140,8 +151,11 @@ internal sealed class WheelView : Canvas
         ApplySettings(_settings);
     }
 
-    /// <summary>Width and height of the whole view, including the opened arc and the drop shadow.</summary>
-    public double Extent => _settings.WheelSize + 2 * (ShadowMargin + ArcRim - Radius);
+    /// <summary>
+    /// Width and height of the whole view, including the opened arc and the drop shadow. It leaves room
+    /// for a two-row arc whatever the buttons, so the window never has to change size mid-drag.
+    /// </summary>
+    public double Extent => _settings.WheelSize + 2 * (ShadowMargin + MaxArcRim - Radius);
 
     public IReadOnlyList<WheelAction> Actions => _actions;
 
@@ -173,8 +187,11 @@ internal sealed class WheelView : Canvas
         }
     }
 
-    /// <summary>How far the opened arc reaches from the wheel's centre, in device-independent pixels.</summary>
-    public double ArcReach => ArcRim;
+    /// <summary>
+    /// How far an opened arc can reach from the wheel's centre, in device-independent pixels. The
+    /// buttons aren't known yet when a drag starts, so this allows for two rows.
+    /// </summary>
+    public double ArcReach => MaxArcRim;
 
     /// <summary>Where the arc is centred: straight down, or straight up.</summary>
     private double ArcCenter => _arcAbove ? 0 : 180;
@@ -188,9 +205,19 @@ internal sealed class WheelView : Canvas
     /// <summary>How far buttons sit inside the edge of whatever they're on, disc or arc.</summary>
     private double Inset => _settings.WheelSize * 0.022;
     private double Gap => Math.Max(3, _settings.WheelSize * 0.018);
-    private double ArcInner => Radius + Inset;
-    private double ArcOuter => ArcInner + _settings.WheelSize * 0.18;
-    private double ArcRim => ArcOuter + Inset;
+    private double ArcDepth => _settings.WheelSize * 0.18;
+
+    /// <summary>
+    /// A row of the arc: the first just outside the disc, the second (when crowded) on an arc of its own
+    /// that starts where the first one's edge is, with the same margin inside each.
+    /// </summary>
+    private double RowInner(int row) => Radius + Inset + row * (ArcDepth + 2 * Inset);
+
+    /// <summary>Where the first arc ends and, with two rows, the second begins.</summary>
+    private double FirstArcEdge => RowOuter(0) + Inset;
+    private double RowOuter(int row) => RowInner(row) + ArcDepth;
+    private double ArcRim => RowOuter(_arcRows - 1) + Inset;
+    private double MaxArcRim => RowOuter(1) + Inset;
     private double Mid => Extent / 2;
 
     public void ApplySettings(Settings settings)
@@ -299,10 +326,12 @@ internal sealed class WheelView : Canvas
 
         if (_expanded && r <= ArcRim && InArcSpan(angle, r))
         {
-            // Counted from the arc's right end.
-            double along = ArcDirection * FromArcCenter(angle) + _arcSpan / 2;
-            int index = Math.Clamp((int)Math.Floor(along / _arcStep), 0, _arcTargets.Length - 1);
-            return _arcTargets[index];
+            // The row is whichever side of the gap between rows the point is; then counted from that
+            // row's right end. Past a shorter row's end (still on the backdrop) is its end button.
+            int row = _arcRows == 2 && r > FirstArcEdge ? 1 : 0;
+            double along = ArcDirection * FromArcCenter(angle) + _rowSpan[row] / 2;
+            int index = Math.Clamp((int)Math.Floor(along / _rowStep[row]), 0, _rowCount[row] - 1);
+            return _arcTargets[(row == 0 ? 0 : _rowCount[0]) + index];
         }
         return -1;
     }
@@ -316,7 +345,9 @@ internal sealed class WheelView : Canvas
         if (_arcTargets.Length == 0)
             return false;
         double margin = Math.Max(0, Inset - Gap / 2) / Math.Max(r, 1) * 180 / Math.PI;
-        return Math.Abs(FromArcCenter(angle)) <= _arcSpan / 2 + margin;
+        // With two rows, each arc is as wide as its own row.
+        double span = _arcRows == 2 ? _rowSpan[r > FirstArcEdge ? 1 : 0] : _arcSpan;
+        return Math.Abs(FromArcCenter(angle)) <= span / 2 + margin;
     }
 
     /// <summary>
@@ -461,6 +492,15 @@ internal sealed class WheelView : Canvas
         if (target == MoreIndex || ButtonFor(target) is not { } button)
             return;
 
+        // The centre says in full what the lit button does ("Convert to WEBP", "Under 1 MB"), since a
+        // long name may be shortened on the button.
+        if (_centerText != null && target >= 0 && target < _actions.Length)
+        {
+            _centerText.Text = on ? Describe(_actions[target]) : _centerFittedLabel;
+            if (_centerDetailText != null && _centerDetail != null)
+                _centerDetailText.Visibility = on ? Visibility.Hidden : Visibility.Visible;
+        }
+
         button.Glow.BeginAnimation(OpacityProperty, new DoubleAnimation(on ? 1 : 0, duration) { EasingFunction = ease });
         button.Text.BeginAnimation(SolidColorBrush.ColorProperty,
             new ColorAnimation(on ? ContrastText(_settings.Accent) : _palette.Text, duration) { EasingFunction = ease });
@@ -471,6 +511,15 @@ internal sealed class WheelView : Canvas
         shift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(push * Math.Sin(rad), duration) { EasingFunction = ease });
         shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-push * Math.Cos(rad), duration) { EasingFunction = ease });
     }
+
+    /// <summary>What a button does, in a few words, for the centre while it's lit.</summary>
+    public static string Describe(WheelAction action) => action.Kind switch
+    {
+        WheelActionKind.Convert => $"Convert to {action.Label}",
+        WheelActionKind.Combine => "Combine into one PDF",
+        _ when action.OpensDialog => $"{action.Label}…",
+        _ => action.Label,
+    };
 
     /// <summary>
     /// "More" lights up for as long as its arc is open, in a soft neutral tint rather than the accent:
@@ -535,6 +584,10 @@ internal sealed class WheelView : Canvas
         double glyphSize = Math.Clamp(Math.Min(arcLength, outer - inner) * 0.26, 13, 24);
         double labelSize = Math.Clamp(Math.Min(arcLength, outer - inner) * 0.15, 9, 13);
 
+        // The label sits across the middle of its button, clear of the rounded corners, so it may use
+        // the button's whole width bar the gaps and a little padding.
+        double ringLabelWidth = ringCount == 1 ? double.PositiveInfinity : arcLength - Gap - corner;
+        double ringLabelSize = FitLabels(_ringTargets.Select(t => t == MoreIndex ? "More" : _actions[t].Label), labelSize, ringLabelWidth);
         for (int slot = 0; slot < ringCount; slot++)
         {
             int target = _ringTargets[slot];
@@ -548,7 +601,7 @@ internal sealed class WheelView : Canvas
                 ? Ring(inner, Radius)
                 : Band(mid - step / 2, mid + step / 2, inner, Radius, Gap / 2, corner, 0);
             AddButton(_layer, target, action, shape, corner, glow, more ? _palette.MoreOpen : _settings.Accent,
-                mid, _ringMid, glyphSize, labelSize);
+                mid, _ringMid, glyphSize, ringLabelSize, ringLabelWidth);
         }
 
         // The arc's own buttons are shorter than the ring's, so their icons are a little smaller,
@@ -597,6 +650,7 @@ internal sealed class WheelView : Canvas
     private void BuildArc(double glyphSize, double labelSize)
     {
         int count = _arcTargets.Length;
+        SplitRows();
         if (count == 0)
         {
             _arc.Data = _arcOutline.Data = Geometry.Empty;
@@ -604,37 +658,111 @@ internal sealed class WheelView : Canvas
             return;
         }
 
-        double labelRadius = (ArcInner + ArcOuter) / 2;
-        // Each button is about as wide as it is tall, until the whole arc reaches its limit.
-        double wanted = _settings.WheelSize * 0.24 / labelRadius * 180 / Math.PI;
-        _arcStep = Math.Min(MaxExpansionSpan / count, wanted);
-        _arcSpan = _arcStep * count;
-        double arcFrom = ArcCenter - _arcSpan / 2, to = ArcCenter + _arcSpan / 2;
-
-        double corner = Math.Min(_settings.WheelSize * 0.03, (ArcOuter - ArcInner) * 0.25);
-        for (int i = 0; i < count; i++)
+        double corner = Math.Min(_settings.WheelSize * 0.03, ArcDepth * 0.25);
+        _arcSpan = 0;
+        int first = 0;
+        double buttonWidth = 0;
+        for (int row = 0; row < _arcRows; row++)
         {
-            // i counts from the arc's right end, which is its clockwise start below the wheel and its
-            // clockwise end above it.
-            double mid = ArcCenter + ArcDirection * ((i + 0.5) * _arcStep - _arcSpan / 2);
-            double from = mid - _arcStep / 2;
-            var shape = Segment(from, from + _arcStep, ArcInner, ArcOuter, Gap, corner);
-            // Square outer corners like the ring's, the end buttons included, which pop out past the
-            // arc's rounded ends a little when lit, the way ring buttons pop out past the disc's edge.
-            var glow = Band(from, from + _arcStep, ArcInner, ArcRim, Gap / 2, corner, 0);
-            AddButton(_arcLayer, _arcTargets[i], _actions[_arcTargets[i]], shape, corner, glow, _settings.Accent,
-                mid, labelRadius, glyphSize, labelSize);
+            int n = _rowCount[row];
+            double inner = RowInner(row), outer = RowOuter(row);
+            double labelRadius = (inner + outer) / 2;
+            // Each button is about as wide as it is tall, until the row reaches the arc's limit. The
+            // second arc's buttons are exactly as wide as the first's (in pixels, so fewer degrees).
+            double wanted = row == 0
+                ? _settings.WheelSize * 0.24 / labelRadius * 180 / Math.PI
+                : buttonWidth / labelRadius * 180 / Math.PI;
+            double step = _rowStep[row] = Math.Min(MaxExpansionSpan / n, wanted);
+            double span = _rowSpan[row] = step * n;
+            if (row == 0)
+                buttonWidth = step * Math.PI / 180 * labelRadius;
+            _arcSpan = Math.Max(_arcSpan, span);
+            // A lit button grows out to the arc's edge on the outer row, and to the middle of the gap
+            // between the rows on the inner one.
+            double glowOuter = row == 0 ? FirstArcEdge : ArcRim;
+            double labelWidth = step * Math.PI / 180 * labelRadius - Gap - corner;
+            double rowLabelSize = FitLabels(_arcTargets.Skip(first).Take(n).Select(t => _actions[t].Label), labelSize, labelWidth);
+            for (int i = 0; i < n; i++)
+            {
+                // i counts from the row's right end, which is its clockwise start below the wheel and
+                // its clockwise end above it.
+                double mid = ArcCenter + ArcDirection * ((i + 0.5) * step - span / 2);
+                double from = mid - step / 2;
+                var shape = Segment(from, from + step, inner, outer, Gap, corner);
+                // Square outer corners like the ring's, the end buttons included, which pop out past the
+                // arc's rounded ends a little when lit, the way ring buttons pop out past the disc's edge.
+                var glow = Band(from, from + step, inner, glowOuter, Gap / 2, corner, 0);
+                int target = _arcTargets[first + i];
+                AddButton(_arcLayer, target, _actions[target], shape, corner, glow, _settings.Accent,
+                    mid, labelRadius, glyphSize, rowLabelSize, labelWidth);
+            }
+            first += n;
         }
+        double arcFrom = ArcCenter - _arcSpan / 2, to = ArcCenter + _arcSpan / 2;
 
         // The end buttons' sides sit half a gap inside the arc's span, so the backdrop's ends sit the
         // margin beyond those. Its inner edge tucks just under the disc's, leaving no seam to cross.
         double side = Gap / 2 - Inset;
         double outerCorner = Math.Min(corner + Inset, (ArcRim - Radius) / 2);
-        _arc.Data = Band(arcFrom, to, Radius - 1, ArcRim, side, 0, outerCorner);
-        // Drawn from the part outside the disc only, so the two shadows meet without doubling up.
-        _arcShadow.Source = Shadow(Band(arcFrom, to, Radius, ArcRim, side, 0, outerCorner));
-        // The outline follows the backdrop's sides and outer edge; along the disc, the disc's own edge does.
-        _arcOutline.Data = Band(arcFrom, to, Radius, ArcRim, side, 0, outerCorner, closed: false);
+        if (_arcRows == 1)
+        {
+            _arc.Data = Band(arcFrom, to, Radius - 1, ArcRim, side, 0, outerCorner);
+            // Drawn from the part outside the disc only, so the two shadows meet without doubling up.
+            _arcShadow.Source = Shadow(Band(arcFrom, to, Radius, ArcRim, side, 0, outerCorner));
+            // The outline follows the backdrop's sides and outer edge; along the disc, the disc's own edge does.
+            _arcOutline.Data = Band(arcFrom, to, Radius, ArcRim, side, 0, outerCorner, closed: false);
+            return;
+        }
+
+        // Two rows: two arcs of their own, each as wide as its buttons. The first hangs from the disc
+        // as a single arc does; the second starts exactly at the first one's edge, with all four
+        // corners rounded.
+        double edge = FirstArcEdge;
+        double firstCorner = Math.Min(corner + Inset, (edge - Radius) / 2);
+        double secondCorner = Math.Min(corner + Inset, (ArcRim - edge) / 2);
+        double fromA = ArcCenter - _rowSpan[0] / 2, toA = ArcCenter + _rowSpan[0] / 2;
+        double fromB = ArcCenter - _rowSpan[1] / 2, toB = ArcCenter + _rowSpan[1] / 2;
+        var second = Band(fromB, toB, edge, ArcRim, side, secondCorner, secondCorner);
+        _arc.Data = new GeometryGroup { Children = { Band(fromA, toA, Radius - 1, edge, side, 0, firstCorner), second } };
+        _arcShadow.Source = Shadow(new GeometryGroup { Children = { Band(fromA, toA, Radius, edge, side, 0, firstCorner), second } });
+        // The first arc's outline stops at the disc, like a single arc's; the second's goes all round,
+        // its inner edge being the line where the two arcs meet.
+        _arcOutline.Data = new GeometryGroup
+        {
+            Children = { Band(fromA, toA, Radius, edge, side, 0, firstCorner, closed: false), second },
+        };
+    }
+
+    /// <summary>
+    /// One row for up to <see cref="SingleRowMax"/> buttons; two for more. Formats get one row and
+    /// everything else (tools, saved buttons) the other, when each lot fits a row, with the bigger lot
+    /// outside; otherwise it's split in half. The dialog buttons stay last either way, so they end up
+    /// at the left end of their row.
+    /// </summary>
+    private void SplitRows()
+    {
+        int count = _arcTargets.Length;
+        _arcRows = count > SingleRowMax ? 2 : 1;
+        if (_arcRows == 1)
+        {
+            (_rowCount[0], _rowCount[1]) = (count, 0);
+            return;
+        }
+        var formats = _arcTargets.Where(t => _actions[t].Kind == WheelActionKind.Convert).ToArray();
+        var rest = _arcTargets.Where(t => _actions[t].Kind != WheelActionKind.Convert).ToArray();
+        int fits = SingleRowMax + 2;
+        if (formats.Length > 0 && rest.Length > 0 && formats.Length <= fits && rest.Length <= fits)
+        {
+            // The outer row is longer around, so the bigger lot goes there and the rows come out
+            // about as wide as each other.
+            var (inner, outer) = formats.Length <= rest.Length ? (formats, rest) : (rest, formats);
+            _arcTargets = inner.Concat(outer).ToArray();
+            (_rowCount[0], _rowCount[1]) = (inner.Length, outer.Length);
+        }
+        else
+        {
+            (_rowCount[0], _rowCount[1]) = (count / 2, count - count / 2);
+        }
     }
 
     private void BuildCenter()
@@ -733,9 +861,23 @@ internal sealed class WheelView : Canvas
     }
 
     /// <param name="corner">Rounding of the resting shape, which <see cref="Segment"/> left for the stroke to add.</param>
+    /// <summary>
+    /// The label size for a whole row of buttons (the ring, or one arc): the usual size, or a little
+    /// smaller if that's what it takes for the widest label to fit its button. One size for the row,
+    /// so its labels don't vary from button to button.
+    /// </summary>
+    private static double FitLabels(IEnumerable<string> labels, double labelSize, double labelWidth)
+    {
+        double widest = labels.Select(label => new FormattedText(label, System.Globalization.CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight, new Typeface(SystemFonts.MessageFontFamily, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
+            labelSize, Brushes.Black, 1.0).WidthIncludingTrailingWhitespace).DefaultIfEmpty(0).Max();
+        return widest > labelWidth ? Math.Max(Math.Max(8.5, labelSize * 0.7), labelSize * labelWidth / widest) : labelSize;
+    }
+
+    /// <param name="labelWidth">Widest the label may be before it's shortened with "…" (the centre has it in full).</param>
     private void AddButton(Canvas host, int target, WheelAction action, Geometry shape, double corner,
                            Geometry glowShape, Color glowColor, double midAngle, double labelRadius,
-                           double glyphSize, double labelSize)
+                           double glyphSize, double labelSize, double labelWidth)
     {
         var body = new Path { Data = shape, StrokeThickness = corner * 2, StrokeLineJoin = PenLineJoin.Round };
         // Tools are tinted with the accent so they read as a different kind of button.
@@ -744,6 +886,10 @@ internal sealed class WheelView : Canvas
         // The glow is a single filled shape, so its transparency can live in the brush and its
         // opacity is free for the fade.
         var glow = new Path { Data = glowShape, Fill = new SolidColorBrush(glowColor), Opacity = 0 };
+
+        // Wrapped, and shortened with "…" only past two lines, if it's still too wide at the row's size
+        // (see FitLabels); the centre says it in full while the button is lit.
+        double maxWidth = Math.Max(labelWidth, labelSize * 3);
 
         var content = new StackPanel
         {
@@ -757,6 +903,12 @@ internal sealed class WheelView : Canvas
                     FontWeight = FontWeights.SemiBold,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     Margin = new Thickness(0, 2, 0, 0),
+                    MaxWidth = maxWidth,
+                    // Still too wide at the row's smallest size: two lines, and only then "…".
+                    TextWrapping = TextWrapping.Wrap,
+                    TextAlignment = TextAlignment.Center,
+                    MaxHeight = labelSize * 2.7,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                 },
             },
         };
