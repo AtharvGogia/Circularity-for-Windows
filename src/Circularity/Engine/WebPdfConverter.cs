@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Interop;
 using System.Windows.Threading;
@@ -15,6 +16,10 @@ namespace Circularity.Engine;
 /// <summary>
 /// Markdown, HTML and plain text to PDF, by laying the page out in Edge (WebView2, built into
 /// Windows 11) and using its "save as PDF". Markdown can also become a standalone HTML page.
+///
+/// The page may be someone else's (a downloaded HTML file), so the browser that lays it out runs no
+/// scripts and fetches nothing from the internet: only the file itself and what's beside it on this
+/// PC. A page that never finishes loading, or a print that hangs, is given up on after a while.
 /// </summary>
 internal sealed class WebPdfConverter : IConverter, IDisposable
 {
@@ -125,12 +130,20 @@ internal sealed class WebPdfConverter : IConverter, IDisposable
     /// One hidden WebView2 on its own UI thread, reused for every print. WebView2 needs a window and a
     /// message loop, and the app's own UI thread shouldn't be held up by page loads.
     /// </summary>
+    /// <summary>A file on this PC, or something embedded in the page; never a web address.</summary>
+    internal static bool IsLocal(string address) =>
+        Uri.TryCreate(address, UriKind.Absolute, out var uri) && uri.Scheme is "file" or "data" or "blob" or "about";
+
     private sealed class WebViewPrinter : IDisposable
     {
+        private static readonly TimeSpan LoadTimeout = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan PrintTimeout = TimeSpan.FromSeconds(90);
+
         private readonly SemaphoreSlim _oneAtATime = new(1, 1);
         private readonly TaskCompletionSource<Dispatcher> _dispatcher = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private HwndSource? _host;
         private CoreWebView2Controller? _controller;
+        private Uri? _page;
 
         public WebViewPrinter()
         {
@@ -153,7 +166,7 @@ internal sealed class WebPdfConverter : IConverter, IDisposable
             try
             {
                 var dispatcher = await _dispatcher.Task;
-                await await dispatcher.InvokeAsync(() => PrintOnOwnThreadAsync(page, outputPath));
+                await await dispatcher.InvokeAsync(() => PrintOnOwnThreadAsync(page, outputPath, cancellationToken));
             }
             finally
             {
@@ -161,20 +174,26 @@ internal sealed class WebPdfConverter : IConverter, IDisposable
             }
         }
 
-        private async Task PrintOnOwnThreadAsync(Uri page, string outputPath)
+        private async Task PrintOnOwnThreadAsync(Uri page, string outputPath, CancellationToken cancellationToken)
         {
             if (_controller == null)
             {
                 string dataFolder = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Circularity", "WebView2");
-                var environment = await CoreWebView2Environment.CreateAsync(null, dataFolder);
+                // Every connection goes to a "proxy" that isn't there, loopback included. Blocking requests
+                // (see LockDown) isn't enough on its own: the browser opens connections early, to save time,
+                // before a page's requests are even made.
+                var options = new CoreWebView2EnvironmentOptions("--proxy-server=127.0.0.1:1 --proxy-bypass-list=<-loopback>");
+                var environment = await CoreWebView2Environment.CreateAsync(null, dataFolder, options);
                 // A never-shown window to host the browser; printing doesn't need it on screen.
-                _host = new HwndSource(new HwndSourceParameters("Circularity print host") { Width = 800, Height = 600, WindowStyle = 0 });
+                _host ??= new HwndSource(new HwndSourceParameters("Circularity print host") { Width = 800, Height = 600, WindowStyle = 0 });
                 _controller = await environment.CreateCoreWebView2ControllerAsync(_host.Handle);
                 _controller.IsVisible = false;
+                LockDown(_controller.CoreWebView2);
             }
 
             var web = _controller.CoreWebView2;
+            _page = page;
             var loaded = new TaskCompletionSource<CoreWebView2WebErrorStatus?>();
             void OnCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
             {
@@ -183,8 +202,21 @@ internal sealed class WebPdfConverter : IConverter, IDisposable
             }
             web.NavigationCompleted += OnCompleted;
             web.Navigate(page.AbsoluteUri);
-            if (await loaded.Task is { } error)
-                throw new InvalidOperationException($"Couldn't lay out the page ({error}).");
+            CoreWebView2WebErrorStatus? error;
+            try
+            {
+                error = await loaded.Task.WaitAsync(LoadTimeout, cancellationToken);
+            }
+            catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
+            {
+                web.NavigationCompleted -= OnCompleted;
+                Reset();
+                if (ex is OperationCanceledException)
+                    throw;
+                throw new TimeoutException($"The page didn't finish loading within {LoadTimeout.TotalSeconds:0} seconds.");
+            }
+            if (error is { } failed)
+                throw new InvalidOperationException($"Couldn't lay out the page ({failed}).");
 
             var settings = web.Environment.CreatePrintSettings();
             settings.ShouldPrintBackgrounds = true;
@@ -198,8 +230,62 @@ internal sealed class WebPdfConverter : IConverter, IDisposable
             }
 
             File.Delete(outputPath);
-            if (!await web.PrintToPdfAsync(outputPath, settings))
+            bool printed;
+            try
+            {
+                printed = await web.PrintToPdfAsync(outputPath, settings).WaitAsync(PrintTimeout, cancellationToken);
+            }
+            catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
+            {
+                // Still busy with this page: a fresh browser for the next one.
+                Reset();
+                if (ex is OperationCanceledException)
+                    throw;
+                throw new TimeoutException($"Saving the page as a PDF didn't finish within {PrintTimeout.TotalSeconds:0} seconds.");
+            }
+            if (!printed)
                 throw new InvalidOperationException("Edge couldn't save the page as a PDF.");
+        }
+
+        /// <summary>
+        /// No scripts, nothing from the internet, and no going to another page: the browser only ever
+        /// shows the page it was given, with the pictures and styles beside it on this PC.
+        /// </summary>
+        private void LockDown(CoreWebView2 web)
+        {
+            web.Settings.IsScriptEnabled = false;
+            web.Settings.AreDefaultScriptDialogsEnabled = false;
+            web.Settings.IsWebMessageEnabled = false;
+            web.Settings.AreDevToolsEnabled = false;
+            web.Settings.AreDefaultContextMenusEnabled = false;
+
+            web.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
+            web.WebResourceRequested += (_, e) =>
+            {
+                if (!IsLocal(e.Request.Uri))
+                    e.Response = web.Environment.CreateWebResourceResponse(null, 403, "Blocked", "");
+            };
+            // A <meta http-equiv="refresh"> (or anything else) can't take it to another page.
+            web.NavigationStarting += (_, e) =>
+            {
+                bool ours = _page != null && Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri) && uri == _page;
+                if (!ours)
+                    e.Cancel = true;
+            };
+        }
+
+        /// <summary>Drops the browser (it's stuck or still busy); the next print makes a new one.</summary>
+        private void Reset()
+        {
+            try
+            {
+                _controller?.Close();
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or COMException)
+            {
+                // Already gone.
+            }
+            _controller = null;
         }
 
         public void Dispose()

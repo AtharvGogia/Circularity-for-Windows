@@ -95,6 +95,12 @@ public partial class App
         if (trigger == GestureTrigger.Shift && !_shiftEnabled)
             return false;
 
+        if (!IsFileDrag(out string holder))
+        {
+            Log.Write($"{trigger} ignored: the left button isn't dragging something ({holder} is following the mouse).");
+            return false;
+        }
+
         if (Native.SHQueryUserNotificationState(out int state) == 0 &&
             state is Native.QUNS_BUSY or Native.QUNS_RUNNING_D3D_FULL_SCREEN or Native.QUNS_PRESENTATION_MODE)
         {
@@ -112,6 +118,36 @@ public partial class App
         Log.Write($"{trigger} while dragging from '{process}'.");
         return true;
     }
+
+    /// <summary>
+    /// Whether the left button is carrying something (files, a link, a picture), rather than the app
+    /// following the mouse itself: selecting text, drawing a selection box, moving a window or a tab.
+    /// While Windows carries a drag, its own drag window holds the mouse; otherwise the app's control
+    /// does. When neither can be seen, it's taken to be a drag, as it always was.
+    /// </summary>
+    private static bool IsFileDrag(out string holder)
+    {
+        uint thread = Native.GetWindowThreadProcessId(Native.GetForegroundWindow(), out _);
+        var info = new Native.GUITHREADINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<Native.GUITHREADINFO>() };
+        if (!Native.GetGUIThreadInfo(thread, ref info))
+        {
+            holder = "nothing";
+            return true;
+        }
+        holder = (info.flags & Native.GUI_INMOVESIZE) != 0 ? "moving a window"
+            : (info.flags & Native.GUI_INMENUMODE) != 0 ? "a menu"
+            : info.hwndCapture == IntPtr.Zero ? "nothing"
+            : Native.ClassNameOf(info.hwndCapture);
+        return ArmsFor(info.flags, info.hwndCapture == IntPtr.Zero ? null : holder);
+    }
+
+    /// <param name="captureClass">The window class of whatever holds the mouse, or null for nothing.</param>
+    internal static bool ArmsFor(int guiFlags, string? captureClass) =>
+        (guiFlags & (Native.GUI_INMOVESIZE | Native.GUI_INMENUMODE)) == 0 &&
+        captureClass is null or OleDragWindowClass;
+
+    /// <summary>The window Windows' drag and drop (OLE) holds the mouse with while it carries a drag.</summary>
+    internal const string OleDragWindowClass = "CLIPBRDWNDCLASS";
 
     private static string ForegroundProcessName()
     {

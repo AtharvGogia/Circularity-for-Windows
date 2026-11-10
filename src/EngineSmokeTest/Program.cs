@@ -305,6 +305,42 @@ internal static class Program
         Check("txt -> pdf", txtPdf.State == JobState.Succeeded && PdfText(txtPdf.OutputPath!).Contains(Marker), Name(txtPdf));
         var htmlPdf = await Convert(html, "pdf");
         Check("html -> pdf", htmlPdf.State == JobState.Succeeded && PdfText(htmlPdf.OutputPath!).Contains(Marker), Name(htmlPdf));
+
+        // Someone else's page: its script doesn't run, it can't reach a server (one on this PC listens for
+        // any attempt), and it can't send the browser to another page before printing.
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        int contacted = 0;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (true)
+                {
+                    using var client = await listener.AcceptTcpClientAsync();
+                    Interlocked.Increment(ref contacted);
+                }
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or System.Net.Sockets.SocketException)
+            {
+            }
+        });
+        string hostile = Path.Combine(dir, "someone's page.html");
+        File.WriteAllText(Path.Combine(dir, "elsewhere.html"), "<!doctype html><p>Elsewhere</p>");
+        File.WriteAllText(hostile,
+            "<!doctype html><html><head><meta http-equiv=\"refresh\" content=\"0; url=elsewhere.html\">" +
+            $"<link rel=\"stylesheet\" href=\"http://127.0.0.1:{port}/style.css\"></head><body><p>Kept</p><p id=\"s\"></p>" +
+            $"<img src=\"http://127.0.0.1:{port}/pixel.png\"><iframe src=\"http://127.0.0.1:{port}/frame\"></iframe>" +
+            "<script>document.getElementById('s').textContent = 'Scripted';</script></body></html>");
+        var hostilePdf = await Convert(hostile, "pdf");
+        await Task.Delay(300);
+        listener.Stop();
+        string hostileText = hostilePdf.State == JobState.Succeeded ? PdfText(hostilePdf.OutputPath!) : "";
+        Check("html -> pdf: no scripts, no network, stays on the page",
+            hostilePdf.State == JobState.Succeeded && hostileText.Contains("Kept") && !hostileText.Contains("Scripted") &&
+            !hostileText.Contains("Elsewhere") && Volatile.Read(ref contacted) == 0,
+            hostilePdf.State == JobState.Succeeded ? $"server contacted {contacted} time(s); text: {hostileText.Trim()}" : Name(hostilePdf));
         if (!mdPdfOk || txtPdf.State != JobState.Succeeded)
             return; // Everything below needs these PDFs.
 

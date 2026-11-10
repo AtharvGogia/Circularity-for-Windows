@@ -149,14 +149,35 @@ internal sealed class Settings
         return copy;
     }
 
-    public static Settings Load()
+    public static Settings Load() => Load(FilePath);
+
+    /// <summary>
+    /// The settings in this file, or the defaults. A file that can't be read as settings (cut short by a
+    /// crash, say) is kept beside it as "settings (unreadable ...).json" rather than being saved over,
+    /// so presets, watched folders and button layouts can still be got back from it.
+    /// </summary>
+    internal static Settings Load(string path)
     {
         try
         {
-            if (File.Exists(FilePath))
-                return FromJson(File.ReadAllText(FilePath));
+            if (File.Exists(path))
+                return FromJson(File.ReadAllText(path));
         }
-        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        catch (JsonException ex)
+        {
+            string kept = Path.Combine(Path.GetDirectoryName(path)!,
+                $"{Path.GetFileNameWithoutExtension(path)} (unreadable {DateTime.Now:yyyy-MM-dd HH-mm-ss}).json");
+            try
+            {
+                File.Move(path, kept);
+                Log.Write($"Couldn't read settings ({ex.Message}); kept them as {Path.GetFileName(kept)} and started from the defaults.");
+            }
+            catch (Exception moveEx) when (moveEx is IOException or UnauthorizedAccessException)
+            {
+                Log.Write($"Couldn't read settings ({ex.Message}), or keep a copy ({moveEx.Message}); using the defaults.");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Log.Write($"Couldn't read settings, using defaults: {ex.Message}");
         }
@@ -176,16 +197,36 @@ internal sealed class Settings
         return settings.Migrate();
     }
 
-    public void Save()
+    public void Save() => Save(FilePath);
+
+    /// <summary>
+    /// Writes the settings to a new file first and only then puts it in place of the old one, so a crash
+    /// or power cut part-way through leaves the old settings, never half of the new ones.
+    /// </summary>
+    internal void Save(string path)
     {
+        string temporary = $"{path}.{Guid.NewGuid():N}.tmp";
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(this, JsonOptions));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            byte[] json = JsonSerializer.SerializeToUtf8Bytes(this, JsonOptions);
+            using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+            {
+                file.Write(json);
+                file.Flush(flushToDisk: true);
+            }
+            File.Move(temporary, path, overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Log.Write($"Couldn't save settings: {ex.Message}");
+            try
+            {
+                File.Delete(temporary);
+            }
+            catch (Exception cleanupEx) when (cleanupEx is IOException or UnauthorizedAccessException)
+            {
+            }
         }
     }
 

@@ -2,8 +2,8 @@
 //   POST /ping  {"id": "<random GUID>", "version": "x.y.z"}
 // The day comes from the server's clock (UTC). The request's IP address and headers are never read
 // or stored (Cloudflare itself sees the address, as with any request). Rows are deleted after 90 days.
-//   GET /stats  {today, last7, last30, versions}
-//   GET /badge  the same "today" number, in shields.io's endpoint format
+//   GET /stats  {today, yesterday, last7, last30, versions}
+//   GET /badge  daily users, in shields.io's endpoint format: the busier of yesterday and today so far
 import { env } from "cloudflare:workers";
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -52,6 +52,13 @@ async function ping(request: Request): Promise<Response> {
 	return new Response(null, { status: 204 });
 }
 
+async function distinctOn(daysAgo: number): Promise<number> {
+	const row = await env.DB.prepare("SELECT COUNT(DISTINCT id) AS n FROM pings WHERE day = ?")
+		.bind(day(daysAgo))
+		.first<{ n: number }>();
+	return row?.n ?? 0;
+}
+
 async function distinctSince(daysAgo: number): Promise<number> {
 	const row = await env.DB.prepare("SELECT COUNT(DISTINCT id) AS n FROM pings WHERE day >= ?")
 		.bind(day(daysAgo))
@@ -60,14 +67,19 @@ async function distinctSince(daysAgo: number): Promise<number> {
 }
 
 async function stats() {
-	const [today, last7, last30] = await Promise.all([distinctSince(0), distinctSince(6), distinctSince(29)]);
+	const [today, yesterday, last7, last30] = await Promise.all([
+		distinctSince(0),
+		distinctOn(1),
+		distinctSince(6),
+		distinctSince(29),
+	]);
 	const { results } = await env.DB.prepare(
 		"SELECT version, COUNT(*) AS n FROM pings WHERE day = ? GROUP BY version ORDER BY n DESC",
 	)
 		.bind(day())
 		.all<{ version: string; n: number }>();
 	const versions = Object.fromEntries(results.map((r) => [r.version, r.n]));
-	return { today, last7, last30, versions };
+	return { today, yesterday, last7, last30, versions };
 }
 
 /**
@@ -92,8 +104,11 @@ export default {
 		if (pathname === "/stats") return cached(request, ctx, async () => json(await stats()));
 		if (pathname === "/badge")
 			return cached(request, ctx, async () => {
-				const { today } = await stats();
-				return json({ schemaVersion: 1, label: "daily users", message: String(today), color: "8B5CF6" });
+				// Today alone starts again from 0 at midnight UTC and fills up through the day, so the
+				// badge shows yesterday's whole day until today has more.
+				const { today, yesterday } = await stats();
+				const users = Math.max(today, yesterday);
+				return json({ schemaVersion: 1, label: "daily users", message: String(users), color: "8B5CF6" });
 			});
 		return new Response("Not found", { status: 404 });
 	},

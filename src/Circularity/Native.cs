@@ -40,6 +40,22 @@ internal static class Native
     public const int QUNS_RUNNING_D3D_FULL_SCREEN = 3;
     public const int QUNS_PRESENTATION_MODE = 4;
 
+    // GUITHREADINFO.flags: the thread is moving or sizing a window, or has a menu open.
+    public const int GUI_INMOVESIZE = 0x2;
+    public const int GUI_INMENUMODE = 0x4;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct GUITHREADINFO
+    {
+        public int cbSize;
+        public int flags;
+        public IntPtr hwndActive, hwndFocus, hwndCapture, hwndMenuOwner, hwndMoveSize, hwndCaret;
+        public RECT rcCaret;
+    }
+
+    [DllImport("user32.dll")]
+    public static extern bool GetGUIThreadInfo(uint threadId, ref GUITHREADINFO info);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT { public int X, Y; }
 

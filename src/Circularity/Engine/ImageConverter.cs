@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -20,6 +21,15 @@ namespace Circularity.Engine;
 /// HEIC with Windows' HEIF encoder where the PC has it, and WebP and AVIF by handing a PNG to FFmpeg
 /// (libwebp, libaom) when it has those encoders.
 /// </summary>
+/// <summary>
+/// What a photo carries besides its pixels: its metadata (when and with what it was taken, where,
+/// and so on) and its colour profile (an iPhone's Display P3, say), so results can keep them.
+/// </summary>
+internal sealed record PhotoDetails(BitmapMetadata? Metadata, ReadOnlyCollection<ColorContext>? ColorProfiles)
+{
+    public static readonly PhotoDetails None = new(null, null);
+}
+
 internal sealed class ImageConverter : IConverter
 {
     private static readonly HashSet<string> Writable = new() { "png", "jpg", "bmp", "gif", "tiff" };
@@ -130,10 +140,10 @@ internal sealed class ImageConverter : IConverter
     /// <summary>Does the work and saves it; returns whether the result has see-through pixels.</summary>
     private static bool Run(string inputPath, Operation operation, string format, string outputPath)
     {
-        BitmapSource image = LoadOriented(inputPath);
+        var (image, details) = Load(inputPath);
         if (operation is CompressTo compress)
         {
-            File.WriteAllBytes(outputPath, Compress(image, compress.Spec));
+            File.WriteAllBytes(outputPath, Compress(image, compress.Spec, details));
             return false;
         }
 
@@ -143,7 +153,7 @@ internal sealed class ImageConverter : IConverter
             CropTo crop => Crop(image, crop.Rect),
             _ => image,
         };
-        Save(image, format, outputPath);
+        Save(image, format, outputPath, details);
         return HasAlpha(image);
     }
 
@@ -297,15 +307,21 @@ internal sealed class ImageConverter : IConverter
     }
 
     /// <summary>
-    /// Decodes the first frame, rotated upright according to its EXIF orientation. Frozen, so any
+    /// Decodes the first frame, turned upright according to its EXIF orientation. Frozen, so any
     /// thread can use it. When Windows has no codec for the file, FFmpeg decodes it instead.
     /// SVG files are decoded via Svg.Skia.
     /// </summary>
-    public static BitmapSource LoadOriented(string path)
+    public static BitmapSource LoadOriented(string path) => Load(path).Image;
+
+    /// <summary>
+    /// Like <see cref="LoadOriented"/>, with the photo's details (when Windows decoded it): its metadata,
+    /// such as when and with what it was taken and where, and its colour profile.
+    /// </summary>
+    internal static (BitmapSource Image, PhotoDetails Details) Load(string path)
     {
         // SVG files are handled by Svg.Skia
         if (IsSvg(path))
-            return LoadSvg(path);
+            return (LoadSvg(path), PhotoDetails.None);
 
         // A see-through AVIF: Windows would read only its colour, so FFmpeg puts its alpha picture back.
         bool mergeAlpha = Formats.NormalizedExtension(path) == "avif" && _fallbackDecoder?.HasAlphaPicture(path) == true;
@@ -326,7 +342,7 @@ internal sealed class ImageConverter : IConverter
         {
             _fallbackDecoder.DecodeImageToPng(path, png, mergeAlpha);
             // FFmpeg has already turned it the right way up, and a PNG has no orientation tag to apply twice.
-            return LoadWithWindows(png);
+            return (LoadWithWindows(png).Image, PhotoDetails.None);
         }
         catch (InvalidOperationException ex)
         {
@@ -338,15 +354,31 @@ internal sealed class ImageConverter : IConverter
         }
     }
 
-    private static BitmapSource LoadWithWindows(string path)
+    private static (BitmapSource Image, PhotoDetails Details) LoadWithWindows(string path)
     {
         using var input = File.OpenRead(path);
         var decoder = BitmapDecoder.Create(input, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         var frame = decoder.Frames[0];
-        double angle = RotationFor(ReadOrientation(frame.Metadata as BitmapMetadata));
-        BitmapSource image = angle == 0 ? frame : new TransformedBitmap(frame, new RotateTransform(angle));
+        // A copy, made while the file is still open: the original reads from the file as it goes.
+        var metadata = Try(() => (frame.Metadata as BitmapMetadata)?.Clone());
+        metadata?.Freeze();
+        BitmapSource image = Upright(frame, ReadOrientation(metadata));
         image.Freeze();
-        return image;
+        var profiles = Try(() => frame.ColorContexts);
+        return (image, new PhotoDetails(metadata, profiles is { Count: > 0 } ? profiles : null));
+    }
+
+    /// <summary>The value, or null for a format that doesn't have it (some codecs throw rather than say so).</summary>
+    private static T? Try<T>(Func<T?> read) where T : class
+    {
+        try
+        {
+            return read();
+        }
+        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or COMException or ArgumentException)
+        {
+            return null;
+        }
     }
 
     /// <summary>What Windows throws for a file it has no codec for (or can't make sense of).</summary>
@@ -445,8 +477,8 @@ internal sealed class ImageConverter : IConverter
                 using var input = File.OpenRead(path);
                 var decoder = BitmapDecoder.Create(input, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
                 var frame = decoder.Frames[0];
-                double angle = RotationFor(ReadOrientation(frame.Metadata as BitmapMetadata));
-                return angle is 90 or 270 ? (frame.PixelHeight, frame.PixelWidth) : (frame.PixelWidth, frame.PixelHeight);
+                bool quarterTurn = ReadOrientation(Try(() => frame.Metadata as BitmapMetadata)) >= 5;
+                return quarterTurn ? (frame.PixelHeight, frame.PixelWidth) : (frame.PixelWidth, frame.PixelHeight);
             }
         }
         catch (Exception ex) when (IsUnreadable(ex) && _fallbackDecoder != null)
@@ -465,13 +497,13 @@ internal sealed class ImageConverter : IConverter
     }
 
     /// <summary>JPEG bytes at the requested quality, or the best quality that fits the size limit.</summary>
-    private static byte[] Compress(BitmapSource image, CompressSpec spec)
+    private static byte[] Compress(BitmapSource image, CompressSpec spec, PhotoDetails details)
     {
         // JPEG has no transparency, and the encoder wants plain 24-bit colour.
         image = HasAlpha(image) ? FlattenOnWhite(image) : new FormatConvertedBitmap(image, PixelFormats.Bgr24, null, 0);
 
         if (spec.MaxBytes is not long maxBytes)
-            return EncodeJpeg(image, Math.Clamp(spec.Quality ?? 80, 1, 100));
+            return EncodeJpeg(image, Math.Clamp(spec.Quality ?? 80, 1, 100), details);
 
         for (int attempt = 0; attempt < 15; attempt++)
         {
@@ -481,7 +513,7 @@ internal sealed class ImageConverter : IConverter
             while (low <= high)
             {
                 int quality = (low + high) / 2;
-                byte[] bytes = EncodeJpeg(image, quality);
+                byte[] bytes = EncodeJpeg(image, quality, details);
                 if (bytes.Length <= maxBytes)
                 {
                     best = bytes;
@@ -504,12 +536,10 @@ internal sealed class ImageConverter : IConverter
         throw new InvalidOperationException($"Couldn't get the image under {FileSizes.Format(maxBytes)}.");
     }
 
-    private static byte[] EncodeJpeg(BitmapSource image, int quality)
+    private static byte[] EncodeJpeg(BitmapSource image, int quality, PhotoDetails details)
     {
-        var encoder = new JpegBitmapEncoder { QualityLevel = quality };
-        encoder.Frames.Add(BitmapFrame.Create(image));
         using var stream = new MemoryStream();
-        encoder.Save(stream);
+        Encode(() => new JpegBitmapEncoder { QualityLevel = quality }, image, "jpg", details, stream);
         return stream.ToArray();
     }
 
@@ -522,7 +552,7 @@ internal sealed class ImageConverter : IConverter
         return new CroppedBitmap(image, new Int32Rect(x, y, w, h));
     }
 
-    private static void Save(BitmapSource image, string format, string outputPath)
+    private static void Save(BitmapSource image, string format, string outputPath, PhotoDetails details)
     {
         // JPG and BMP have no transparency, and Windows' HEIF encoder drops it; put transparent pixels
         // on white instead of black.
@@ -543,7 +573,7 @@ internal sealed class ImageConverter : IConverter
             }
         }
 
-        BitmapEncoder encoder = format switch
+        BitmapEncoder NewEncoder() => format switch
         {
             "png" => new PngBitmapEncoder(),
             "jpg" => new JpegBitmapEncoder { QualityLevel = 92 },
@@ -556,10 +586,114 @@ internal sealed class ImageConverter : IConverter
         // The HEIF encoder takes plain 32-bit colour.
         if (format == "heic")
             image = new FormatConvertedBitmap(image, PixelFormats.Bgr32, null, 0);
-        encoder.Frames.Add(BitmapFrame.Create(image));
 
         using var output = File.Create(outputPath);
-        encoder.Save(output);
+        Encode(NewEncoder, image, format, details, output);
+    }
+
+    /// <summary>
+    /// Encodes one picture with as much of the original's details as the format can hold: JPEG and TIFF
+    /// keep the metadata, and JPEG, PNG and TIFF the colour profile. If the encoder won't take them,
+    /// the picture is saved without them rather than not at all.
+    /// </summary>
+    private static void Encode(Func<BitmapEncoder> newEncoder, BitmapSource image, string format, PhotoDetails details, Stream output)
+    {
+        var metadata = OutputMetadata(format, image, details.Metadata);
+        var profiles = format is "jpg" or "png" or "tiff" ? details.ColorProfiles : null;
+        if (metadata != null || profiles != null)
+        {
+            long start = output.Position;
+            try
+            {
+                var encoder = newEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(image, null, metadata, profiles));
+                encoder.Save(output);
+                return;
+            }
+            catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or ArgumentException or COMException or FileFormatException)
+            {
+                Log.Write($"Couldn't keep the photo's details in the .{format} ({ex.Message}); saving the picture without them.");
+                output.SetLength(start);
+                output.Position = start;
+            }
+        }
+        var plain = newEncoder();
+        plain.Frames.Add(BitmapFrame.Create(image));
+        plain.Save(output);
+    }
+
+    /// <summary>
+    /// The metadata for a JPEG or TIFF result: the camera's own data (exposure, lenses, when it was
+    /// taken) and location, plus the usual fields (camera, author, title, keywords, rating). Not the old
+    /// thumbnail, which would show the uncropped picture. It's marked upright, since the pixels already
+    /// are, and its stated size is the result's.
+    /// </summary>
+    internal static BitmapMetadata? OutputMetadata(string format, BitmapSource image, BitmapMetadata? source)
+    {
+        if (source == null || format is not ("jpg" or "tiff"))
+            return null;
+        try
+        {
+            var result = new BitmapMetadata(format);
+            string from = source.Format == "jpg" ? "/app1/ifd" : "/ifd";
+            string to = format == "jpg" ? "/app1/ifd" : "/ifd";
+            foreach (string block in new[] { "exif", "gps" })
+            {
+                if (Try(() => source.GetQuery($"{from}/{block}") as BitmapMetadata) is { } part)
+                    TrySet(result, $"{to}/{block}", part);
+            }
+            CopyFields(source, result);
+            TrySet(result, $"{to}/{{ushort=274}}", (ushort)1);
+            // The size the camera recorded, if it's there, is the uncropped, unresized one.
+            if (result.ContainsQuery($"{to}/exif/{{ushort=40962}}"))
+            {
+                TrySet(result, $"{to}/exif/{{ushort=40962}}", (uint)image.PixelWidth);
+                TrySet(result, $"{to}/exif/{{ushort=40963}}", (uint)image.PixelHeight);
+            }
+            return result;
+        }
+        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or ArgumentException or COMException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The fields Windows knows by name, which it can read from any format and write to any other.</summary>
+    private static void CopyFields(BitmapMetadata source, BitmapMetadata target)
+    {
+        void Copy(Action copy)
+        {
+            try
+            {
+                copy();
+            }
+            catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or ArgumentException or COMException)
+            {
+                // Not in this format; the rest still go.
+            }
+        }
+        Copy(() => { if (source.DateTaken is { } v) target.DateTaken = v; });
+        Copy(() => { if (source.CameraManufacturer is { } v) target.CameraManufacturer = v; });
+        Copy(() => { if (source.CameraModel is { } v) target.CameraModel = v; });
+        Copy(() => { if (source.ApplicationName is { } v) target.ApplicationName = v; });
+        Copy(() => { if (source.Author is { Count: > 0 } v) target.Author = v; });
+        Copy(() => { if (source.Copyright is { } v) target.Copyright = v; });
+        Copy(() => { if (source.Title is { } v) target.Title = v; });
+        Copy(() => { if (source.Subject is { } v) target.Subject = v; });
+        Copy(() => { if (source.Comment is { } v) target.Comment = v; });
+        Copy(() => { if (source.Keywords is { Count: > 0 } v) target.Keywords = v; });
+        Copy(() => { if (source.Rating > 0) target.Rating = source.Rating; });
+    }
+
+    private static void TrySet(BitmapMetadata metadata, string query, object value)
+    {
+        try
+        {
+            metadata.SetQuery(query, value);
+        }
+        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or ArgumentException or COMException)
+        {
+        }
     }
 
     private static ushort ReadOrientation(BitmapMetadata? metadata)
@@ -576,8 +710,26 @@ internal sealed class ImageConverter : IConverter
         return 1;
     }
 
-    /// <summary>Phone photos are often stored sideways with an EXIF flag saying how to rotate them.</summary>
-    private static double RotationFor(ushort orientation) => orientation switch { 3 => 180, 6 => 90, 8 => 270, _ => 0 };
+    /// <summary>
+    /// Phone photos are often stored sideways, with an EXIF flag saying how to turn them upright: a
+    /// quarter, half or three-quarter turn, or (2, 4, 5 and 7, from some cameras and editing apps) that
+    /// plus a mirror image.
+    /// </summary>
+    internal static BitmapSource Upright(BitmapSource image, ushort orientation)
+    {
+        Transform? turn = orientation switch
+        {
+            2 => new ScaleTransform(-1, 1),
+            3 => new RotateTransform(180),
+            4 => new ScaleTransform(1, -1),
+            5 => new TransformGroup { Children = { new RotateTransform(90), new ScaleTransform(-1, 1) } },
+            6 => new RotateTransform(90),
+            7 => new TransformGroup { Children = { new RotateTransform(90), new ScaleTransform(1, -1) } },
+            8 => new RotateTransform(270),
+            _ => null,
+        };
+        return turn == null ? image : new TransformedBitmap(image, turn);
+    }
 
     private static bool HasAlpha(BitmapSource image)
     {

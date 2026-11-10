@@ -268,7 +268,52 @@ public class FolderWatcherTests
         isOwnResult ?? (_ => false),
         settleTime: TimeSpan.FromMilliseconds(150),
         batchDelay: TimeSpan.FromMilliseconds(300),
-        giveUpAfter: TimeSpan.FromSeconds(10));
+        giveUpAfter: TimeSpan.FromSeconds(10),
+        retryEvery: TimeSpan.FromMilliseconds(300));
+
+    [Fact]
+    public async Task AFolderThatIsntThereYet_IsWatchedOnceItAppears()
+    {
+        using var temp = new TempFolder();
+        string later = Path.Combine(temp.Path, "USB drive");
+        var arrived = new ConcurrentQueue<string>();
+        using var watcher = Fast();
+        watcher.FilesArrived += (_, files) => { foreach (var f in files) arrived.Enqueue(f); };
+        watcher.Update(new[] { new WatchedFolder("w", later, "png") });
+
+        await Task.Delay(500);
+        Directory.CreateDirectory(later);
+        await Task.Delay(1000); // A retry or two.
+        string photo = Path.Combine(later, "photo.jpg");
+        File.WriteAllText(photo, "x");
+
+        await WaitFor(() => arrived.Contains(photo));
+    }
+
+    [Fact]
+    public async Task AFolderDeletedAndMadeAgain_IsWatchedAgain()
+    {
+        using var temp = new TempFolder();
+        string folder = Path.Combine(temp.Path, "Screenshots");
+        Directory.CreateDirectory(folder);
+        var arrived = new ConcurrentQueue<string>();
+        using var watcher = Fast();
+        watcher.FilesArrived += (_, files) => { foreach (var f in files) arrived.Enqueue(f); };
+        watcher.Update(new[] { new WatchedFolder("w", folder, "png") });
+
+        string first = Path.Combine(folder, "first.jpg");
+        File.WriteAllText(first, "x");
+        await WaitFor(() => arrived.Contains(first));
+
+        Directory.Delete(folder, recursive: true);
+        await Task.Delay(1000);
+        Directory.CreateDirectory(folder);
+        await Task.Delay(1000);
+        string second = Path.Combine(folder, "second.jpg");
+        File.WriteAllText(second, "x");
+
+        await WaitFor(() => arrived.Contains(second));
+    }
 
     [Theory]
     [InlineData("photo.jpg", true)]

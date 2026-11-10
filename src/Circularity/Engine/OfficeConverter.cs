@@ -20,6 +20,9 @@ namespace Circularity.Engine;
 /// hidden one. So we only close the app afterwards if it had no documents open when we started,
 /// and any setting we change on it is put back.
 ///
+/// Macros never run: Office lets a program that drives it run a document's macros by default (its
+/// "low" automation security), so the app is switched to "force disable" before anything is opened.
+///
 /// An invisible Office app that shows a prompt waits forever, so: documents are opened with a dummy
 /// password (a protected file fails at once instead of asking for one), and a watchdog ends the copy
 /// of Office we started if it takes too long or the job is cancelled.
@@ -31,6 +34,7 @@ internal sealed class OfficeConverter : IConverter
     private const int XlTypePdf = 0;
     private const int PpSaveAsPdf = 32, MsoTrue = -1, MsoFalse = 0;
     private const int Utf8CodePage = 65001;
+    private const int MsoAutomationSecurityForceDisable = 3;
     private const string NoPassword = "Circularity-not-a-password";
 
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(3);
@@ -103,9 +107,11 @@ internal sealed class OfficeConverter : IConverter
         bool wasIdle = word.Documents.Count == 0;
         session.OursToEnd = wasIdle;
         int alerts = word.DisplayAlerts;
+        int security = word.AutomationSecurity;
         try
         {
             word.DisplayAlerts = WdAlertsNone;
+            word.AutomationSecurity = MsoAutomationSecurityForceDisable;
             // FileName, ConfirmConversions, ReadOnly, AddToRecentFiles, PasswordDocument
             dynamic document = word.Documents.Open(inputPath, false, true, false, NoPassword);
             try
@@ -130,6 +136,7 @@ internal sealed class OfficeConverter : IConverter
         finally
         {
             word.DisplayAlerts = alerts;
+            word.AutomationSecurity = security;
             if (wasIdle)
                 word.Quit(WdDoNotSaveChanges);
             Release(word);
@@ -142,9 +149,11 @@ internal sealed class OfficeConverter : IConverter
         bool wasIdle = excel.Workbooks.Count == 0;
         session.OursToEnd = wasIdle;
         bool alerts = excel.DisplayAlerts;
+        int security = excel.AutomationSecurity;
         try
         {
             excel.DisplayAlerts = false;
+            excel.AutomationSecurity = MsoAutomationSecurityForceDisable;
             // FileName, UpdateLinks (0 = don't), ReadOnly, Format, Password
             dynamic workbook = excel.Workbooks.Open(inputPath, 0, true, Type.Missing, NoPassword);
             try
@@ -160,6 +169,7 @@ internal sealed class OfficeConverter : IConverter
         finally
         {
             excel.DisplayAlerts = alerts;
+            excel.AutomationSecurity = security;
             if (wasIdle)
                 excel.Quit();
             Release(excel);
@@ -171,8 +181,10 @@ internal sealed class OfficeConverter : IConverter
         dynamic powerPoint = session.Start("PowerPoint.Application", "POWERPNT");
         bool wasIdle = powerPoint.Presentations.Count == 0;
         session.OursToEnd = wasIdle;
+        int security = powerPoint.AutomationSecurity;
         try
         {
+            powerPoint.AutomationSecurity = MsoAutomationSecurityForceDisable;
             // FileName, ReadOnly, Untitled, WithWindow (no window, so nothing flashes on screen).
             // "::password::" on the end makes a protected file fail instead of prompting.
             dynamic presentation = powerPoint.Presentations.Open($"{inputPath}::{NoPassword}::", MsoTrue, MsoFalse, MsoFalse);
@@ -188,6 +200,7 @@ internal sealed class OfficeConverter : IConverter
         }
         finally
         {
+            powerPoint.AutomationSecurity = security;
             if (wasIdle)
                 powerPoint.Quit();
             Release(powerPoint);

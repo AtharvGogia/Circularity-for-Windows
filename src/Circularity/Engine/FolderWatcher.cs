@@ -12,6 +12,9 @@ namespace Circularity.Engine;
 /// finished arriving (a download or a copy can take a while), gathered into one batch per folder when
 /// several arrive together. Files already there when watching starts are left alone, and so are
 /// Circularity's own results (see <see cref="OutputPaths.IsProduced"/>), so nothing is converted twice.
+///
+/// A folder that isn't there (a USB or network drive not plugged in or not ready yet, say), or that
+/// goes away while watched, is looked for again every so often, and watched again once it's back.
 /// </summary>
 internal sealed class FolderWatcher : IDisposable
 {
@@ -30,6 +33,7 @@ internal sealed class FolderWatcher : IDisposable
     private readonly TimeSpan _settleTime;
     private readonly TimeSpan _batchDelay;
     private readonly TimeSpan _giveUpAfter;
+    private readonly TimeSpan _retryEvery;
     private readonly object _lock = new();
     private readonly List<Watch> _watches = new();
     private bool _disposed;
@@ -37,12 +41,15 @@ internal sealed class FolderWatcher : IDisposable
     /// <param name="isOwnResult">True for a file Circularity wrote, which is never picked up.</param>
     /// <param name="settleTime">How long a file's size has to stay the same before it counts as arrived.</param>
     /// <param name="batchDelay">How long to wait for more files before reporting a batch.</param>
-    public FolderWatcher(Func<string, bool> isOwnResult, TimeSpan? settleTime = null, TimeSpan? batchDelay = null, TimeSpan? giveUpAfter = null)
+    /// <param name="retryEvery">How often a folder that isn't there (or stopped being watched) is looked for again.</param>
+    public FolderWatcher(Func<string, bool> isOwnResult, TimeSpan? settleTime = null, TimeSpan? batchDelay = null, TimeSpan? giveUpAfter = null,
+        TimeSpan? retryEvery = null)
     {
         _isOwnResult = isOwnResult;
         _settleTime = settleTime ?? TimeSpan.FromSeconds(1);
         _batchDelay = batchDelay ?? TimeSpan.FromSeconds(2);
         _giveUpAfter = giveUpAfter ?? TimeSpan.FromMinutes(30);
+        _retryEvery = retryEvery ?? TimeSpan.FromSeconds(30);
     }
 
     /// <summary>Watches exactly these folders (the enabled ones), keeping watches that haven't changed.</summary>
@@ -60,9 +67,10 @@ internal sealed class FolderWatcher : IDisposable
             }
             foreach (var folder in wanted.Where(f => _watches.All(w => w.Folder != f)))
             {
+                // Kept even if the folder isn't there yet: it's looked for again until it is.
                 var watch = new Watch(this, folder);
-                if (watch.Start())
-                    _watches.Add(watch);
+                watch.Start();
+                _watches.Add(watch);
             }
         }
     }
@@ -143,8 +151,11 @@ internal sealed class FolderWatcher : IDisposable
         private readonly CancellationTokenSource _stop = new();
         private readonly HashSet<string> _arriving = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<string> _batch = new();
+        private readonly object _gate = new();
         private FileSystemWatcher? _watcher;
         private Timer? _batchTimer;
+        private Timer? _checkTimer;
+        private bool _missing; // Said once in the log, not on every retry.
 
         public Watch(FolderWatcher owner, WatchedFolder folder)
         {
@@ -154,11 +165,51 @@ internal sealed class FolderWatcher : IDisposable
 
         public WatchedFolder Folder { get; }
 
-        public bool Start()
+        /// <summary>Starts watching, or (if the folder isn't there) keeps looking for it.</summary>
+        public void Start()
         {
+            lock (_gate)
+            {
+                TryWatch();
+                _checkTimer = new Timer(_ => Check(), null, _owner._retryEvery, _owner._retryEvery);
+            }
+        }
+
+        /// <summary>Every so often: watches the folder again if it's back, or notices that it's gone.</summary>
+        private void Check()
+        {
+            lock (_gate)
+            {
+                if (_stop.IsCancellationRequested)
+                    return;
+                if (_watcher == null)
+                {
+                    TryWatch();
+                }
+                else if (!Directory.Exists(Folder.Path))
+                {
+                    Lost("isn't there any more");
+                }
+            }
+        }
+
+        /// <summary>Stops the watcher that no longer works; <see cref="Check"/> starts a new one once it can.</summary>
+        private void Lost(string why)
+        {
+            _watcher?.Dispose();
+            _watcher = null;
+            if (!_missing)
+                Log.Write($"Watched folder {Folder.Path} {why}; looking for it again every {_owner._retryEvery.TotalSeconds:0} seconds.");
+            _missing = true;
+        }
+
+        /// <summary>Called with <see cref="_gate"/> held.</summary>
+        private void TryWatch()
+        {
+            FileSystemWatcher? watcher = null;
             try
             {
-                _watcher = new FileSystemWatcher(Folder.Path)
+                watcher = new FileSystemWatcher(Folder.Path)
                 {
                     IncludeSubdirectories = Folder.IncludeSubfolders,
                     // Folders too, so a folder moved in with subfolders on is noticed (see Noticed).
@@ -166,19 +217,40 @@ internal sealed class FolderWatcher : IDisposable
                     // Room for a big copy's worth of names before Windows drops events.
                     InternalBufferSize = 64 * 1024,
                 };
-                _watcher.Created += (_, e) => Noticed(e.FullPath);
+                watcher.Created += (_, e) => Noticed(e.FullPath);
                 // A finished download is usually renamed from ".crdownload" or ".part" to its real name.
-                _watcher.Renamed += (_, e) => Noticed(e.FullPath);
-                _watcher.Error += (_, e) => Log.Write($"Watched folder {Folder.Path}: {e.GetException().Message}");
-                _watcher.EnableRaisingEvents = true;
-                Log.Write($"Watching {Folder.Path}{(Folder.IncludeSubfolders ? " and its subfolders" : "")} → {Folder.Action}");
-                return true;
+                watcher.Renamed += (_, e) => Noticed(e.FullPath);
+                watcher.Error += (sender, e) => OnError((FileSystemWatcher)sender, e.GetException());
+                watcher.EnableRaisingEvents = true;
+                _watcher = watcher;
+                Log.Write($"{(_missing ? "Watching again" : "Watching")} {Folder.Path}{(Folder.IncludeSubfolders ? " and its subfolders" : "")} → {Folder.Action}");
+                _missing = false;
             }
             catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or PlatformNotSupportedException)
             {
-                Log.Write($"Can't watch {Folder.Path}: {ex.Message}");
-                _watcher?.Dispose();
-                return false;
+                watcher?.Dispose();
+                if (!_missing)
+                    Log.Write($"Can't watch {Folder.Path} ({ex.Message}); looking for it again every {_owner._retryEvery.TotalSeconds:0} seconds.");
+                _missing = true;
+            }
+        }
+
+        private void OnError(FileSystemWatcher watcher, Exception error)
+        {
+            // Too much at once (a big copy): some names were missed, but the watcher itself carries on.
+            if (error is InternalBufferOverflowException)
+            {
+                Log.Write($"Watched folder {Folder.Path}: too many changes at once, so some new files may have been missed.");
+                return;
+            }
+            lock (_gate)
+            {
+                // The folder was deleted, the drive unplugged or the network went away: this watcher is done.
+                if (watcher == _watcher && !_stop.IsCancellationRequested)
+                {
+                    Lost($"stopped being watched ({error.Message})");
+                    TryWatch();
+                }
             }
         }
 
@@ -259,7 +331,13 @@ internal sealed class FolderWatcher : IDisposable
         public void Dispose()
         {
             _stop.Cancel();
-            _watcher?.Dispose();
+            lock (_gate)
+            {
+                _checkTimer?.Dispose();
+                _checkTimer = null;
+                _watcher?.Dispose();
+                _watcher = null;
+            }
             lock (_batch)
             {
                 _batchTimer?.Dispose();

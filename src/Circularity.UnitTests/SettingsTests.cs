@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using Xunit;
 using Circularity;
 
@@ -168,5 +169,53 @@ public class SettingsMigrationTests
 
         Assert.False(string.IsNullOrEmpty(settings.UsageId));
         Assert.NotEqual(first, settings.UsageId);
+    }
+}
+
+public class SettingsFileTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), $"CircularitySettings_{Guid.NewGuid():N}");
+    private string SettingsPath => Path.Combine(_dir, "settings.json");
+
+    public SettingsFileTests() => Directory.CreateDirectory(_dir);
+
+    public void Dispose() => Directory.Delete(_dir, recursive: true);
+
+    [Fact]
+    public void Save_ThenLoad_KeepsEverything_AndLeavesNoTemporaryFiles()
+    {
+        var settings = new Settings { WheelSize = 300 };
+        settings.Presets.Add(new Preset("p1", "Email", Compress: new Engine.CompressSpec(Quality: 60), Kind: "Image"));
+        settings.Save(SettingsPath);
+        settings.WheelSize = 320;
+        settings.Save(SettingsPath); // Over an existing file.
+
+        var loaded = Settings.Load(SettingsPath);
+        Assert.Equal(320, loaded.WheelSize);
+        Assert.Single(loaded.Presets);
+        Assert.Equal(new[] { "settings.json" }, Directory.GetFiles(_dir).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public void Load_UnreadableFile_KeepsItBesideAndStartsFromDefaults()
+    {
+        // A save cut short by a crash or power cut.
+        string broken = "{ \"WheelSize\": 300, \"Presets\": [ { \"Id\": \"p1\", \"Na";
+        File.WriteAllText(SettingsPath, broken);
+
+        var loaded = Settings.Load(SettingsPath);
+
+        Assert.Equal(new Settings().WheelSize, loaded.WheelSize);
+        Assert.False(File.Exists(SettingsPath)); // So saving the defaults can't overwrite it.
+        var kept = Assert.Single(Directory.GetFiles(_dir, "settings (unreadable *).json"));
+        Assert.Equal(broken, File.ReadAllText(kept));
+    }
+
+    [Fact]
+    public void Load_EmptyFile_IsKeptToo()
+    {
+        File.WriteAllText(SettingsPath, "");
+        Settings.Load(SettingsPath);
+        Assert.Single(Directory.GetFiles(_dir, "settings (unreadable *).json"));
     }
 }
