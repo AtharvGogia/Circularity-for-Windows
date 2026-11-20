@@ -59,11 +59,11 @@ internal sealed class PdfConverter : IConverter
                 break;
 
             case ConvertTo { Target: "pdf" }:
-                await Sta.Run(() => { BuildPdf(new[] { inputPath }, outputPath, progress); return 0; }, "PdfConverter");
+                await Sta.Run(() => { BuildPdf(new[] { inputPath }, outputPath, progress, cancellationToken); return 0; }, "PdfConverter");
                 break;
 
             case CombineIntoPdf combine:
-                await Sta.Run(() => { BuildPdf(combine.Files, outputPath, progress); return 0; }, "PdfConverter");
+                await Sta.Run(() => { BuildPdf(combine.Files, outputPath, progress, cancellationToken); return 0; }, "PdfConverter");
                 break;
 
             case CompressTo compress:
@@ -91,6 +91,7 @@ internal sealed class PdfConverter : IConverter
             if (count > 1)
             {
                 File.Delete(outputPath);
+                OutputPaths.Forget(outputPath);
                 folder = OutputPaths.ReserveFolder(inputPath, "pages");
             }
 
@@ -190,7 +191,7 @@ internal sealed class PdfConverter : IConverter
     }
 
     /// <summary>Appends every PDF's pages and one page per image, in order, then saves.</summary>
-    private static void BuildPdf(System.Collections.Generic.IReadOnlyList<string> files, string outputPath, IProgress<double> progress)
+    private static void BuildPdf(System.Collections.Generic.IReadOnlyList<string> files, string outputPath, IProgress<double> progress, CancellationToken cancellationToken)
     {
         // Source PDFs must stay open until Build(), which is when their pages are actually copied.
         var sources = new System.Collections.Generic.List<PdfPigDocument>();
@@ -199,13 +200,17 @@ internal sealed class PdfConverter : IConverter
             var builder = new PdfDocumentBuilder();
             for (int i = 0; i < files.Count; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 string file = files[i];
                 if (Formats.NormalizedExtension(file) == "pdf")
                 {
                     var source = PdfPigDocument.Open(file);
                     sources.Add(source);
                     for (int page = 1; page <= source.NumberOfPages; page++)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
                         builder.AddPage(source, page);
+                    }
                 }
                 else
                 {
@@ -213,6 +218,7 @@ internal sealed class PdfConverter : IConverter
                 }
                 progress.Report((i + 1) / (double)(files.Count + 1));
             }
+            cancellationToken.ThrowIfCancellationRequested();
             File.WriteAllBytes(outputPath, builder.Build());
         }
         finally

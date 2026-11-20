@@ -445,3 +445,61 @@ public class FolderWatcherTests
         }
     }
 }
+
+public class OutputAndClipboardTests
+{
+    [Fact]
+    public void Reserve_CollisionKeepsExistingResultMarkedProduced()
+    {
+        using var temp = new TempFolder();
+        string original = temp.File("photo.jpg");
+
+        string first = OutputPaths.Reserve(original, "png");
+        string second = OutputPaths.Reserve(original, "png");
+
+        Assert.NotEqual(first, second);
+        Assert.True(OutputPaths.IsProduced(first));
+        Assert.True(OutputPaths.IsProduced(second));
+    }
+
+    [Fact]
+    public void Reserve_SkipsFolderWithSameName()
+    {
+        using var temp = new TempFolder();
+        string original = temp.File("photo.jpg");
+        string collidingFolder = Path.Combine(temp.Path, "photo.png");
+        Directory.CreateDirectory(collidingFolder);
+
+        string reserved = OutputPaths.Reserve(original, "png");
+
+        Assert.Equal(Path.Combine(temp.Path, "photo (1).png"), reserved);
+        Assert.True(File.Exists(reserved));
+        Assert.False(OutputPaths.IsProduced(collidingFolder));
+    }
+
+    [Fact]
+    public void ClipboardPathsFor_IncludesFilesAndFolders()
+    {
+        using var temp = new TempFolder();
+        string file = temp.File("photo.png");
+        string folder = Path.Combine(temp.Path, "report (pages)");
+        Directory.CreateDirectory(folder);
+        string missing = Path.Combine(temp.Path, "gone.png");
+
+        Assert.Equal(new[] { file, folder }, App.ClipboardPathsFor(new string?[] { file, folder, missing, null, "" }));
+    }
+
+    [Fact]
+    public void BuildHtml_EncodesAmpersandInBaseHref()
+    {
+        using var temp = new TempFolder();
+        string folder = Path.Combine(temp.Path, "R&D&copy");
+        Directory.CreateDirectory(folder);
+        string md = Path.Combine(folder, "notes.md");
+
+        string html = WebPdfConverter.BuildHtml(md, "md", "hello");
+
+        Assert.Contains("R&amp;D&amp;copy", html);
+        Assert.DoesNotContain("R&D&copy", html);
+    }
+}

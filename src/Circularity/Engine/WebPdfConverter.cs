@@ -108,14 +108,16 @@ internal sealed class WebPdfConverter : IConverter, IDisposable
         return outputPath;
     }
 
-    private static async Task<string> ToHtmlAsync(string inputPath, string ext, CancellationToken cancellationToken)
+    private static async Task<string> ToHtmlAsync(string inputPath, string ext, CancellationToken cancellationToken) =>
+        BuildHtml(inputPath, ext, await File.ReadAllTextAsync(inputPath, cancellationToken));
+
+    internal static string BuildHtml(string inputPath, string ext, string text)
     {
-        string text = await File.ReadAllTextAsync(inputPath, cancellationToken);
         string body = ext == "md"
             ? Markdown.ToHtml(text, Pipeline)
             : $"<pre class=\"plain\">{WebUtility.HtmlEncode(text)}</pre>";
         string title = WebUtility.HtmlEncode(Path.GetFileNameWithoutExtension(inputPath));
-        string baseHref = new Uri(Path.GetDirectoryName(inputPath)! + Path.DirectorySeparatorChar).AbsoluteUri;
+        string baseHref = WebUtility.HtmlEncode(new Uri(Path.GetDirectoryName(inputPath)! + Path.DirectorySeparatorChar).AbsoluteUri);
         return $"<!doctype html><html><head><meta charset=\"utf-8\"><title>{title}</title>" +
                $"<base href=\"{baseHref}\"><style>{Css}</style></head><body>{body}</body></html>";
     }

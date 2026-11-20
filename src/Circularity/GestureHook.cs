@@ -107,7 +107,10 @@ internal sealed class GestureHook : IDisposable
                     _leftDown = true;
                     _dragging = false;
                     _triggeredThisDrag = false;
-                    _shiftHeldAtDragStart = _shiftDown;
+                    // Read the real Shift state rather than trusting _shiftDown alone: a UAC prompt
+                    // or lock screen can swallow a key-up and otherwise leave Shift stuck "held".
+                    _shiftHeldAtDragStart = (Native.GetAsyncKeyState(Native.VK_SHIFT) & 0x8000) != 0;
+                    _shiftDown = _shiftHeldAtDragStart;
                     _downX = info.pt.X;
                     _downY = info.pt.Y;
                     break;

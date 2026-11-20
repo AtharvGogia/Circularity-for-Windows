@@ -41,6 +41,27 @@ public partial class App
             UpdateUndoItem();
         }
 
+        // Copy output file(s) to clipboard if enabled, even when finish notifications are off.
+        int copiedToClipboard = 0;
+        if (succeeded.Count > 0 && _settings.CopyToClipboardOnFinish)
+        {
+            try
+            {
+                var filePaths = ClipboardPathsFor(succeeded.Select(j => j.OutputPath));
+                if (filePaths.Length > 0)
+                {
+                    var paths = new StringCollection();
+                    paths.AddRange(filePaths);
+                    Clipboard.SetFileDropList(paths);
+                    copiedToClipboard = filePaths.Length;
+                }
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                // Clipboard busy, ignore silently
+            }
+        }
+
         if (failed.Count > 0)
         {
             string title = failed.Count == jobs.Count ? "That didn't work" : $"{failed.Count} of {jobs.Count} files failed";
@@ -58,29 +79,8 @@ public partial class App
                 : Path.GetFileName(j.OutputPath)));
             if (cancelled > 0)
                 body += $" ({cancelled} cancelled)";
-
-            // Copy output file(s) to clipboard if enabled
-            if (_settings.CopyToClipboardOnFinish)
-            {
-                try
-                {
-                    var filePaths = succeeded
-                        .Where(j => !string.IsNullOrEmpty(j.OutputPath) && File.Exists(j.OutputPath!))
-                        .Select(j => j.OutputPath!)
-                        .ToArray();
-                    if (filePaths.Length > 0)
-                    {
-                        var paths = new StringCollection();
-                        paths.AddRange(filePaths);
-                        Clipboard.SetFileDropList(paths);
-                        body += filePaths.Length == 1 ? "\nFile copied to clipboard." : "\nFiles copied to clipboard.";
-                    }
-                }
-                catch (System.Runtime.InteropServices.COMException)
-                {
-                    // Clipboard busy, ignore silently
-                }
-            }
+            if (copiedToClipboard > 0)
+                body += copiedToClipboard == 1 ? "\nFile copied to clipboard." : "\nFiles copied to clipboard.";
 
             // With Open and Open folder buttons where Windows allows; otherwise the tray's own balloon.
             string first = succeeded[0].OutputPath!;
@@ -119,6 +119,13 @@ public partial class App
         _releaseTimer.Stop();
         _releaseTimer.Start();
     }
+
+    /// <summary>Existing files and folders (such as a multi-page PDF's pages folder) ready for the clipboard.</summary>
+    internal static string[] ClipboardPathsFor(IEnumerable<string?> outputs) =>
+        outputs
+            .Where(p => !string.IsNullOrEmpty(p) && (File.Exists(p) || Directory.Exists(p)))
+            .Select(p => p!)
+            .ToArray();
 
     private static long SizeOf(string path)
     {

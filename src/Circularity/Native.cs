@@ -20,8 +20,12 @@ internal static class Native
     public const int WM_RBUTTONDOWN = 0x0204;
     public const int WM_RBUTTONUP = 0x0205;
 
+    public const int VK_SHIFT = 0x10;
     public const int VK_LSHIFT = 0xA0;
     public const int VK_RSHIFT = 0xA1;
+
+    [DllImport("user32.dll")]
+    public static extern short GetAsyncKeyState(int vKey);
 
     public const int SM_CXDRAG = 68;
     public const int SM_CYDRAG = 69;

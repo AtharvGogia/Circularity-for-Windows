@@ -116,12 +116,14 @@ internal sealed partial class FfmpegConverter : IConverter
         foreach (string arg in args)
             startInfo.ArgumentList.Add(arg);
         using var process = Process.Start(startInfo)!;
-        string errors = process.StandardError.ReadToEnd();
+        // Read stderr concurrently so a hung ffmpeg can't block forever before WaitForExit times out.
+        var stderr = process.StandardError.ReadToEndAsync();
         if (!process.WaitForExit(60_000))
         {
-            process.Kill();
+            TryKill(process);
             throw new InvalidOperationException("Decoding the image took too long.");
         }
+        string errors = stderr.GetAwaiter().GetResult();
         if (process.ExitCode != 0 || !File.Exists(pngPath) || new FileInfo(pngPath).Length == 0)
             throw new InvalidOperationException(errors.Trim().Split('\n').LastOrDefault()?.Trim() ?? "FFmpeg couldn't read it.");
     }
@@ -141,14 +143,31 @@ internal sealed partial class FfmpegConverter : IConverter
             foreach (string arg in new[] { "-hide_banner", "-nostdin", "-i", path })
                 startInfo.ArgumentList.Add(arg);
             using var process = Process.Start(startInfo)!;
-            string info = process.StandardError.ReadToEnd();
-            process.WaitForExit(10_000);
+            var stderr = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(10_000))
+            {
+                TryKill(process);
+                return false;
+            }
+            string info = stderr.GetAwaiter().GetResult();
             // "Stream #0:1[0x2]: Video: av1 ..., gray(...)" with "title : Alpha" under it.
             return Regex.IsMatch(info, @"Stream #0:1\S*: Video: .*gray") || Regex.IsMatch(info, @"title\s*:\s*Alpha");
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             return false;
+        }
+    }
+
+    private static void TryKill(Process process)
+    {
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException)
+        {
+            // Already exited.
         }
     }
 

@@ -34,11 +34,7 @@ internal static class OutputPaths
     /// </summary>
     public static void Forget(string path) => Produced.TryRemove(Path.GetFullPath(path), out _);
 
-    private static string Remember(string path)
-    {
-        Produced[Path.GetFullPath(path)] = 0;
-        return path;
-    }
+    private static bool TryRemember(string path) => Produced.TryAdd(Path.GetFullPath(path), 0);
 
     /// <summary>
     /// Picks "photo.png" (or "photo (resized).png" with a suffix), adding " (1)", " (2)"... if
@@ -55,22 +51,33 @@ internal static class OutputPaths
         for (int i = 0; ; i++)
         {
             string candidate = Path.Combine(dir, i == 0 ? $"{name}.{extension}" : $"{name} ({i}).{extension}");
+            if (Directory.Exists(candidate))
+                continue;
+            // Remembered before it exists, so a watcher that sees it appear already knows it.
+            // Track whether we added it so a collision never un-marks a result that was already ours.
+            bool added = TryRemember(candidate);
             try
             {
-                // Remembered before it exists, so a watcher that sees it appear already knows it.
-                Remember(candidate);
                 new FileStream(candidate, FileMode.CreateNew).Dispose();
                 return candidate;
             }
             catch (IOException) when (File.Exists(candidate))
             {
-                // Taken (by someone else's file); try the next number.
-                Produced.TryRemove(Path.GetFullPath(candidate), out _);
+                // Taken (by someone else's file, or another conversion's); try the next number.
+                if (added)
+                    Forget(candidate);
+            }
+            catch (UnauthorizedAccessException) when (Directory.Exists(candidate))
+            {
+                // A folder with this name appeared in the meantime; try the next number.
+                if (added)
+                    Forget(candidate);
             }
             catch
             {
                 // Not written (no permission, say): it isn't a result, so a watcher mustn't skip it.
-                Produced.TryRemove(Path.GetFullPath(candidate), out _);
+                if (added)
+                    Forget(candidate);
                 throw;
             }
         }
@@ -86,14 +93,15 @@ internal static class OutputPaths
             string candidate = Path.Combine(dir, i == 0 ? name : $"{name} ({i})");
             if (Directory.Exists(candidate) || File.Exists(candidate))
                 continue;
-            Remember(candidate);
+            bool added = TryRemember(candidate);
             try
             {
                 Directory.CreateDirectory(candidate);
             }
             catch
             {
-                Produced.TryRemove(Path.GetFullPath(candidate), out _);
+                if (added)
+                    Forget(candidate);
                 throw;
             }
             return candidate;
