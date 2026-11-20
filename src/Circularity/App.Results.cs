@@ -41,9 +41,10 @@ public partial class App
             UpdateUndoItem();
         }
 
-        // Copy output file(s) to clipboard if enabled, even when finish notifications are off.
+        // Copy output file(s) to clipboard if enabled, even when finish notifications are off. Not for a
+        // watched folder's results: those arrive unasked and would replace whatever was copied.
         int copiedToClipboard = 0;
-        if (succeeded.Count > 0 && _settings.CopyToClipboardOnFinish)
+        if (succeeded.Count > 0 && _settings.CopyToClipboardOnFinish && !batch.FromWatchedFolder)
         {
             try
             {

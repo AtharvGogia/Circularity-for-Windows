@@ -111,7 +111,8 @@ public partial class App
         if (suited.Count > 0)
         {
             Log.Write($"Watched folder {folder.Path}: {operation.Describe()} for {suited.Count} new file(s).");
-            _queue!.Enqueue(suited, operation);
+            // Set before ReportBatch can see it: that runs on this (the UI) thread, after this returns.
+            _queue!.Enqueue(suited, operation).FromWatchedFolder = true;
         }
     }
 }

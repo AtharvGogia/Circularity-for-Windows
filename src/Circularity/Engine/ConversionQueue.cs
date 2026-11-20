@@ -48,6 +48,9 @@ internal sealed class ConversionBatch
 
     public IReadOnlyList<ConversionJob> Jobs { get; private set; } = Array.Empty<ConversionJob>();
 
+    /// <summary>Started by a watched folder rather than by the user, so its results stay off the clipboard.</summary>
+    public bool FromWatchedFolder { get; set; }
+
     internal void SetJobs(IReadOnlyList<ConversionJob> jobs)
     {
         Jobs = jobs;
